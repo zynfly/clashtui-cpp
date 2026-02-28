@@ -19,6 +19,7 @@ public:
         std::function<bool(const std::string&, std::string&)> delete_profile;
         std::function<bool(const std::string&, std::string&)> switch_profile;
         std::function<std::string()> get_active_profile;
+        std::function<bool(const std::string&, int)> set_update_interval;
 
         std::function<void()> post_refresh;
     };
@@ -27,6 +28,7 @@ public:
     ~SubscriptionPanel();
 
     void set_callbacks(Callbacks cb);
+    void refresh_profiles();
 
     ftxui::Component component();
 

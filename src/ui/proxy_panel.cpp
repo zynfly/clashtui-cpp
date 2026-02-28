@@ -266,7 +266,7 @@ void ProxyPanel::refresh_data() {
 Component ProxyPanel::component() {
     auto self = impl_.get();
 
-    return Renderer([self] {
+    return Renderer([self](bool /*focused*/) -> Element {
         std::lock_guard<std::mutex> lock(self->data_mutex);
         return hbox({
             self->render_groups(),

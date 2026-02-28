@@ -72,6 +72,10 @@ public:
     /// PUT /configs {"path": "..."}
     bool reload_config(const std::string& config_path);
 
+    /// Reload config and wait until mihomo has applied it
+    /// (polls /proxies until non-empty groups appear, up to max_wait_ms)
+    bool reload_config_and_wait(const std::string& config_path, int max_wait_ms = 3000);
+
     std::map<std::string, ProxyGroup> get_proxy_groups();
     std::map<std::string, ProxyNode> get_proxy_nodes();
     bool select_proxy(const std::string& group, const std::string& proxy);

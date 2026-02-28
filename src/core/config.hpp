@@ -45,8 +45,11 @@ public:
     AppConfig& data();
     const AppConfig& data() const;
 
+    static bool is_privileged();
     static std::string config_dir();
     static std::string config_path();
+    static std::string mihomo_dir();
+    static std::string default_mihomo_config_path();
     static std::string expand_home(const std::string& path);
 
 private:

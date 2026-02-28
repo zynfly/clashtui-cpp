@@ -18,19 +18,20 @@ using namespace ftxui;
 // ── State machine ───────────────────────────────────────────────
 
 enum class WizardMode {
-    Check,             // Initial: detect installed or not
-    NotInstalled,      // Show path selection + Enter to install
-    Installed,         // Show version, U=update, X=uninstall
-    FetchingRelease,   // Background: fetching release info
-    ReadyToInstall,    // Show release info, Enter to download
-    Downloading,       // Progress bar with proxy status
-    Verifying,         // SHA256 check
-    Installing,        // Extract + copy
-    ServiceSetup,      // Y/N create systemd service
-    Complete,          // Done, any key to return
-    ConfirmUninstall,  // Confirm uninstall Y/N
-    Uninstalling,      // Uninstall in progress
-    Failed             // Error, Enter to retry, Esc to go back
+    Check,               // Initial: detect installed or not
+    NotInstalled,        // Show path selection + Enter to install
+    Installed,           // Show version + service/update/uninstall menu
+    FetchingRelease,     // Background: fetching release info
+    ReadyToInstall,      // Show release info, Enter to download
+    Downloading,         // Progress bar with proxy status
+    Verifying,           // SHA256 check
+    Installing,          // Extract + copy
+    ServiceSetup,        // Y/N create systemd service
+    Complete,            // Done, any key to return
+    ConfirmUninstall,    // Confirm uninstall mihomo Y/N
+    Uninstalling,        // Uninstall in progress
+    ConfirmUninstallSelf,// Confirm uninstall clashtui-cpp Y/N
+    Failed               // Error, Enter to retry, Esc to go back
 };
 
 // ── Impl ────────────────────────────────────────────────────────
@@ -41,9 +42,11 @@ struct InstallWizard::Impl {
 
     int selected_path = 0;              // 0=/usr/local/bin, 1=~/.local/bin
     bool remove_config_on_uninstall = false;
+    bool remove_self_config = false;    // for clashtui-cpp self-uninstall
     bool initial_check_done = false;   // Whether do_check() has been run
     bool service_status_cached = false;
     bool cached_service_active = false;
+    bool cached_service_installed = false;  // whether unit file exists
 
     // Protected by mutex (written by worker thread, read by renderer)
     std::mutex mtx;
@@ -298,7 +301,7 @@ struct InstallWizard::Impl {
                 config_dir = fs::path(cfg).parent_path().string();
             }
             if (config_dir.empty()) {
-                config_dir = Config::expand_home("~/.config/mihomo");
+                config_dir = Config::mihomo_dir();
             }
 
             std::string service_name = "mihomo";
@@ -346,7 +349,7 @@ struct InstallWizard::Impl {
             bool is_system = (binary_path.find("/usr/") == 0);
             ServiceScope scope = is_system ? ServiceScope::System : ServiceScope::User;
 
-            std::string config_dir = Config::expand_home("~/.config/mihomo");
+            std::string config_dir = Config::mihomo_dir();
 
             bool ok = Installer::uninstall(
                 binary_path, service_name, scope,
@@ -365,6 +368,136 @@ struct InstallWizard::Impl {
             } else {
                 set_error(T().uninstall_failed);
             }
+            post_refresh();
+        });
+    }
+
+    // ── Service operations (synchronous, quick) ─────────────────
+
+    void do_service_start() {
+        auto name = get_service_name();
+        auto scope = get_scope();
+        if (Installer::start_service(name, scope)) {
+            set_status(T().service_started);
+        } else {
+            set_status(T().sub_failed);
+        }
+        refresh_service_status();
+        post_refresh();
+    }
+
+    void do_service_stop() {
+        auto name = get_service_name();
+        auto scope = get_scope();
+        if (Installer::stop_service(name, scope)) {
+            set_status(T().service_stopped);
+        } else {
+            set_status(T().sub_failed);
+        }
+        refresh_service_status();
+        post_refresh();
+    }
+
+    void do_service_install() {
+        std::string binary_path;
+        if (callbacks.get_binary_path) binary_path = callbacks.get_binary_path();
+        if (binary_path.empty()) binary_path = "/usr/local/bin/mihomo";
+
+        std::string config_dir = Config::mihomo_dir();
+        if (callbacks.get_config_path) {
+            auto cfg = Config::expand_home(callbacks.get_config_path());
+            if (!cfg.empty()) config_dir = fs::path(cfg).parent_path().string();
+        }
+
+        auto name = get_service_name();
+        auto scope = get_scope();
+        if (Installer::install_service(binary_path, config_dir, name, scope)) {
+            set_status(T().service_created);
+        } else {
+            set_status(T().sub_failed);
+        }
+        refresh_service_status();
+        post_refresh();
+    }
+
+    void do_service_remove() {
+        auto name = get_service_name();
+        auto scope = get_scope();
+        // Dependency: stop service before removing
+        if (cached_service_active) {
+            Installer::stop_service(name, scope);
+        }
+        if (Installer::remove_service(name, scope)) {
+            set_status(T().service_removed);
+        } else {
+            set_status(T().sub_failed);
+        }
+        refresh_service_status();
+        post_refresh();
+    }
+
+    // ── Self-uninstall (clashtui-cpp itself) ─────────────────────
+
+    void do_uninstall_self() {
+        join_worker();
+        worker = std::thread([this]() {
+            set_mode(WizardMode::Uninstalling);
+            post_refresh();
+
+            // Step 1: Stop and remove clashtui-cpp daemon service if exists
+            std::string daemon_svc = "clashtui-cpp";
+            auto scope = get_scope();
+            auto daemon_svc_path = Installer::get_service_file_path(daemon_svc, scope);
+
+            if (fs::exists(daemon_svc_path)) {
+                set_status(T().uninstall_stopping);
+                post_refresh();
+                Installer::stop_service(daemon_svc, scope);
+
+                set_status(T().uninstall_disabling);
+                post_refresh();
+                Installer::disable_service(daemon_svc, scope);
+
+                set_status(T().uninstall_removing_svc);
+                post_refresh();
+                Installer::remove_service(daemon_svc, scope);
+            }
+
+            // Step 2: Remove the clashtui-cpp binary
+            set_status(T().uninstall_removing_bin);
+            post_refresh();
+
+            // Find our own binary path
+            std::string self_binary;
+            {
+                std::error_code ec;
+                auto exe = fs::read_symlink("/proc/self/exe", ec);
+                if (!ec) self_binary = exe.string();
+            }
+
+            if (!self_binary.empty() && fs::exists(self_binary)) {
+                bool needs_sudo = (self_binary.find("/usr/") == 0);
+                if (needs_sudo) {
+                    std::string cmd = "sudo rm -f '" + self_binary + "'";
+                    (void)std::system(cmd.c_str());
+                } else {
+                    std::error_code ec;
+                    fs::remove(self_binary, ec);
+                }
+            }
+
+            // Step 3: Optionally remove config directory
+            if (remove_self_config) {
+                set_status(T().uninstall_removing_cfg);
+                post_refresh();
+
+                auto config_dir = Config::config_dir();
+                std::error_code ec;
+                fs::remove_all(config_dir, ec);
+            }
+
+            set_status(T().uninstall_self_complete);
+            set_mode(WizardMode::Complete);
             post_refresh();
         });
     }
@@ -430,36 +563,57 @@ struct InstallWizard::Impl {
         });
     }
 
-    void refresh_service_status() {
-        std::string service_name = "mihomo";
+    ServiceScope get_scope() const {
         std::string binary_path;
-        if (callbacks.get_service_name) service_name = callbacks.get_service_name();
         if (callbacks.get_binary_path) binary_path = callbacks.get_binary_path();
-
         bool is_system = (!binary_path.empty() && binary_path.find("/usr/") == 0);
-        ServiceScope scope = is_system ? ServiceScope::System : ServiceScope::User;
+        return is_system ? ServiceScope::System : ServiceScope::User;
+    }
+
+    std::string get_service_name() const {
+        std::string service_name = "mihomo";
+        if (callbacks.get_service_name) service_name = callbacks.get_service_name();
+        return service_name;
+    }
+
+    void refresh_service_status() {
+        auto service_name = get_service_name();
+        auto scope = get_scope();
         cached_service_active = Installer::is_service_active(service_name, scope);
+        // Check if service unit file exists on disk
+        auto svc_path = Installer::get_service_file_path(service_name, scope);
+        cached_service_installed = fs::exists(svc_path);
         service_status_cached = true;
     }
 
     Element render_installed() {
         std::string ver;
+        std::string status_copy;
         {
             std::lock_guard<std::mutex> lock(mtx);
             ver = current_version;
+            status_copy = status_msg;
         }
 
-        // Use cached service status (refreshed in do_check, not every frame)
         bool active = cached_service_active;
-        std::string svc_status = active ? T().service_active : T().service_inactive;
-        auto svc_color = active ? Color::Green : Color::GrayDark;
+        bool svc_installed = cached_service_installed;
+        bool has_sd = Installer::has_systemd();
 
         Elements content;
-        content.push_back(hbox({
-            text(" " + std::string(T().install_installed)) | color(Color::Green),
-            filler(),
-            text("[" + svc_status + "] ") | color(svc_color),
-        }));
+
+        // Header: installed status + service badge
+        {
+            auto svc_badge = active
+                ? text(" [" + std::string(T().service_active) + "] ") | color(Color::Green)
+                : svc_installed
+                    ? text(" [" + std::string(T().service_inactive) + "] ") | color(Color::Yellow)
+                    : text(" [" + std::string(T().service_not_installed) + "] ") | color(Color::GrayDark);
+            content.push_back(hbox({
+                text(" " + std::string(T().install_installed)) | color(Color::Green),
+                filler(),
+                has_sd ? svc_badge : text(""),
+            }));
+        }
 
         if (!ver.empty()) {
             content.push_back(hbox({
@@ -468,22 +622,38 @@ struct InstallWizard::Impl {
             }));
         }
 
-        // Show "up to date" if we just checked
-        std::string status_copy;
-        {
-            std::lock_guard<std::mutex> lock(mtx);
-            status_copy = status_msg;
-        }
-        if (!status_copy.empty() &&
-            status_copy == T().install_up_to_date) {
+        // Show status message (e.g. "up to date", "service started")
+        if (!status_copy.empty()) {
             content.push_back(text(" " + status_copy) | color(Color::Green));
         }
 
+        // Service management section
+        if (has_sd) {
+            content.push_back(separator());
+            if (svc_installed) {
+                // Service is installed: show start/stop toggle
+                if (active) {
+                    content.push_back(text(" [1] " + std::string(T().service_stop)) | dim);
+                } else {
+                    content.push_back(text(" [1] " + std::string(T().service_start)) | dim);
+                }
+                // Service is installed: offer removal
+                content.push_back(text(" [2] " + std::string(T().service_remove)) | dim);
+            } else {
+                // Service not installed: offer install
+                content.push_back(text(" [2] " + std::string(T().service_install)) | dim);
+            }
+        }
+
+        // Update & uninstall section
         content.push_back(separator());
         content.push_back(text(" [U] " + std::string(T().install_check_update)) | dim);
         content.push_back(text(" [X] " + std::string(T().uninstall_title)) | dim);
+        content.push_back(text(" [D] " + std::string(T().uninstall_self_title)) | dim);
+
+        // Hint
         content.push_back(separator());
-        content.push_back(text(" U / X, Esc = back") | dim);
+        content.push_back(text(" Esc = back") | dim);
 
         return vbox(std::move(content));
     }
@@ -676,6 +846,26 @@ struct InstallWizard::Impl {
         });
     }
 
+    Element render_confirm_uninstall_self() {
+        std::string cfg_label = std::string(T().uninstall_self_remove_config)
+                                + " (" + Config::config_dir() + ")";
+        auto opt_cfg = remove_self_config
+                           ? text(" [x] " + cfg_label)
+                           : text(" [ ] " + cfg_label);
+
+        return vbox({
+            text(" " + std::string(T().uninstall_self_title)) | color(Color::Red) | bold,
+            separator(),
+            text(" " + std::string(T().uninstall_self_confirm)) | color(Color::Yellow),
+            separator(),
+            opt_cfg | dim,
+            separator(),
+            text(" [Y] " + std::string(T().confirm) +
+                 "  [N] " + std::string(T().cancel)) | dim,
+            text(" Up/Down = toggle option") | dim,
+        });
+    }
+
     Element render_failed() {
         std::string err;
         {
@@ -707,7 +897,7 @@ void InstallWizard::set_callbacks(Callbacks cb) {
 Component InstallWizard::component() {
     auto self = impl_.get();
 
-    return Renderer([self] {
+    return Renderer([self](bool /*focused*/) -> Element {
         // Auto-transition from Check mode (runs once, then mode changes)
         if (self->mode == WizardMode::Check && !self->initial_check_done) {
             self->do_check();
@@ -751,6 +941,9 @@ Component InstallWizard::component() {
             case WizardMode::Uninstalling:
                 body = self->render_uninstalling();
                 break;
+            case WizardMode::ConfirmUninstallSelf:
+                body = self->render_confirm_uninstall_self();
+                break;
             case WizardMode::Failed:
                 body = self->render_failed();
                 break;
@@ -787,6 +980,7 @@ Component InstallWizard::component() {
                 case WizardMode::ReadyToInstall:
                 case WizardMode::ServiceSetup:
                 case WizardMode::ConfirmUninstall:
+                case WizardMode::ConfirmUninstallSelf:
                 case WizardMode::Failed:
                     self->set_mode(WizardMode::Check);
                     self->initial_check_done = false;
@@ -865,6 +1059,10 @@ Component InstallWizard::component() {
                 self->remove_config_on_uninstall = !self->remove_config_on_uninstall;
                 return true;
             }
+            if (mode == WizardMode::ConfirmUninstallSelf) {
+                self->remove_self_config = !self->remove_self_config;
+                return true;
+            }
             return false;
         }
 
@@ -877,6 +1075,10 @@ Component InstallWizard::component() {
             }
             if (mode == WizardMode::ConfirmUninstall) {
                 self->remove_config_on_uninstall = !self->remove_config_on_uninstall;
+                return true;
+            }
+            if (mode == WizardMode::ConfirmUninstallSelf) {
+                self->remove_self_config = !self->remove_self_config;
                 return true;
             }
             return false;
@@ -893,10 +1095,41 @@ Component InstallWizard::component() {
                 return true;
             }
 
-            // X/x: Uninstall (from Installed state)
+            // 1: Service start/stop toggle (from Installed state)
+            if (ch == "1" && mode == WizardMode::Installed) {
+                if (Installer::has_systemd() && self->cached_service_installed) {
+                    if (self->cached_service_active) {
+                        self->do_service_stop();
+                    } else {
+                        self->do_service_start();
+                    }
+                    return true;
+                }
+            }
+
+            // 2: Service install/remove toggle (from Installed state)
+            if (ch == "2" && mode == WizardMode::Installed) {
+                if (Installer::has_systemd()) {
+                    if (self->cached_service_installed) {
+                        self->do_service_remove();
+                    } else {
+                        self->do_service_install();
+                    }
+                    return true;
+                }
+            }
+
+            // X/x: Uninstall mihomo (from Installed state)
             if ((ch == "X" || ch == "x") && mode == WizardMode::Installed) {
                 self->remove_config_on_uninstall = false;
                 self->set_mode(WizardMode::ConfirmUninstall);
+                return true;
+            }
+
+            // D/d: Uninstall clashtui-cpp (from Installed state)
+            if ((ch == "D" || ch == "d") && mode == WizardMode::Installed) {
+                self->remove_self_config = false;
+                self->set_mode(WizardMode::ConfirmUninstallSelf);
                 return true;
             }
 
@@ -910,6 +1143,10 @@ Component InstallWizard::component() {
                     self->do_uninstall();
                     return true;
                 }
+                if (mode == WizardMode::ConfirmUninstallSelf) {
+                    self->do_uninstall_self();
+                    return true;
+                }
             }
 
             // N/n: Decline
@@ -921,6 +1158,10 @@ Component InstallWizard::component() {
                     return true;
                 }
                 if (mode == WizardMode::ConfirmUninstall) {
+                    self->set_mode(WizardMode::Installed);
+                    return true;
+                }
+                if (mode == WizardMode::ConfirmUninstallSelf) {
                     self->set_mode(WizardMode::Installed);
                     return true;
                 }

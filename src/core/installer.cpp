@@ -99,7 +99,7 @@ std::string Installer::systemctl_cmd(ServiceScope scope) {
     return "systemctl --user";
 }
 
-std::string Installer::service_file_path(const std::string& service_name, ServiceScope scope) {
+std::string Installer::get_service_file_path(const std::string& service_name, ServiceScope scope) {
     if (scope == ServiceScope::System) {
         return "/etc/systemd/system/" + service_name + ".service";
     }
@@ -727,7 +727,7 @@ bool Installer::install_daemon_service(
         if (!is_valid_service_name(service_name)) return false;
 
         std::string content = generate_daemon_service_content(clashtui_binary_path, scope);
-        std::string path = service_file_path(service_name, scope);
+        std::string path = get_service_file_path(service_name, scope);
 
         if (scope == ServiceScope::System) {
             std::string tmp = "/tmp/clashtui-daemon-service-" + service_name + ".tmp";
@@ -769,7 +769,7 @@ bool Installer::install_service(const std::string& binary_path,
         if (!is_valid_service_name(service_name)) return false;
 
         std::string content = generate_service_content(binary_path, config_dir, scope);
-        std::string path = service_file_path(service_name, scope);
+        std::string path = get_service_file_path(service_name, scope);
 
         if (scope == ServiceScope::System) {
             // Write via temp file + sudo cp (avoids shell interpretation of content)
@@ -875,7 +875,7 @@ bool Installer::remove_service(const std::string& service_name, ServiceScope sco
         run_command(ctl + " disable " + service_name + ".service 2>/dev/null");
 
         // Remove the service file
-        std::string path = service_file_path(service_name, scope);
+        std::string path = get_service_file_path(service_name, scope);
         if (scope == ServiceScope::System) {
             run_command("sudo rm -f " + shell_quote(path));
         } else {
@@ -922,7 +922,7 @@ bool Installer::uninstall(const std::string& binary_path,
 
             // Step 3: Remove service file
             report(UninstallProgress::Phase::RemovingService, "Removing service files...");
-            std::string svc_path = service_file_path(service_name, scope);
+            std::string svc_path = get_service_file_path(service_name, scope);
             if (scope == ServiceScope::System) {
                 run_command("sudo rm -f " + shell_quote(svc_path));
             } else {

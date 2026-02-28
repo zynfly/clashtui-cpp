@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <cstdlib>
+#include <unistd.h>
 
 namespace fs = std::filesystem;
 
@@ -51,6 +52,7 @@ TEST_F(ConfigTest, DefaultValues) {
 }
 
 TEST_F(ConfigTest, ConfigDirPath) {
+    if (geteuid() == 0) GTEST_SKIP() << "Skipped: runs as root, config_dir ignores HOME";
     std::string dir = Config::config_dir();
     EXPECT_FALSE(dir.empty());
     EXPECT_NE(dir.find(".config/clashtui-cpp"), std::string::npos);
@@ -63,11 +65,13 @@ TEST_F(ConfigTest, ConfigFilePath) {
 }
 
 TEST_F(ConfigTest, LoadNonExistentReturnsFalse) {
+    if (geteuid() == 0) GTEST_SKIP() << "Skipped: runs as root, config_dir ignores HOME";
     Config cfg;
     EXPECT_FALSE(cfg.load());
 }
 
 TEST_F(ConfigTest, SaveAndLoad) {
+    if (geteuid() == 0) GTEST_SKIP() << "Skipped: runs as root, config_dir ignores HOME";
     // Save
     Config cfg1;
     cfg1.data().api_host = "10.0.0.1";
@@ -104,6 +108,7 @@ TEST_F(ConfigTest, SaveAndLoad) {
 }
 
 TEST_F(ConfigTest, SaveCreatesDirectory) {
+    if (geteuid() == 0) GTEST_SKIP() << "Skipped: runs as root, config_dir ignores HOME";
     // Remove config dir if it exists
     fs::remove_all(Config::config_dir());
     EXPECT_FALSE(fs::exists(Config::config_dir()));
@@ -114,6 +119,7 @@ TEST_F(ConfigTest, SaveCreatesDirectory) {
 }
 
 TEST_F(ConfigTest, LoadMalformedYamlUsesDefaults) {
+    if (geteuid() == 0) GTEST_SKIP() << "Skipped: runs as root, config_dir ignores HOME";
     // Write invalid YAML
     fs::create_directories(Config::config_dir());
     std::ofstream out(Config::config_path());

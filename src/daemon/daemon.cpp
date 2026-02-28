@@ -222,9 +222,9 @@ std::string Daemon::handle_command(const std::string& json_line) {
 }
 
 bool Daemon::reload_mihomo() {
-    std::string path = profile_mgr_.active_profile_path();
-    if (path.empty() || !client_) return false;
-    return client_->reload_config(path);
+    std::string deployed = profile_mgr_.deploy_active_to_mihomo();
+    if (deployed.empty() || !client_) return false;
+    return client_->reload_config(deployed);
 }
 
 bool Daemon::wait_for_mihomo(int timeout_sec) {
@@ -286,10 +286,10 @@ int Daemon::run() {
     if (process_mgr_.is_running()) {
         wait_for_mihomo();
 
-        // 4. Load active profile if set
-        std::string active = profile_mgr_.active_profile_path();
-        if (!active.empty() && client_) {
-            client_->reload_config(active);
+        // 4. Deploy and load active profile if set
+        std::string deployed = profile_mgr_.deploy_active_to_mihomo();
+        if (!deployed.empty() && client_) {
+            client_->reload_config(deployed);
         }
     }
 

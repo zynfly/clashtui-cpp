@@ -263,6 +263,18 @@ bool ProfileManager::delete_profile(const std::string& name) {
     return true;
 }
 
+bool ProfileManager::set_update_interval(const std::string& name, int hours) {
+    auto profiles = load_metadata();
+    auto it = std::find_if(profiles.begin(), profiles.end(),
+        [&](const ProfileInfo& p) { return p.name == name; });
+
+    if (it == profiles.end()) return false;
+
+    it->auto_update = (hours > 0);
+    it->update_interval_hours = hours > 0 ? hours : 0;
+    return save_metadata(profiles);
+}
+
 bool ProfileManager::switch_active(const std::string& name) {
     // Verify profile exists
     auto profiles = load_metadata();
@@ -293,6 +305,26 @@ std::string ProfileManager::active_profile_path() const {
 
 std::string ProfileManager::active_profile_name() const {
     return config_.data().active_profile;
+}
+
+std::string ProfileManager::deploy_active_to_mihomo() const {
+    std::string src = active_profile_path();
+    if (src.empty() || !fs::exists(src)) return "";
+
+    std::string mihomo_cfg = Config::expand_home(config_.data().mihomo_config_path);
+    if (mihomo_cfg.empty()) return "";
+
+    try {
+        // Ensure mihomo config directory exists
+        fs::create_directories(fs::path(mihomo_cfg).parent_path());
+        // Atomic deploy: write to temp file, then rename
+        std::string tmp = mihomo_cfg + ".tmp";
+        fs::copy_file(src, tmp, fs::copy_options::overwrite_existing);
+        fs::rename(tmp, mihomo_cfg);
+        return mihomo_cfg;
+    } catch (...) {
+        return "";
+    }
 }
 
 std::vector<std::string> ProfileManager::profiles_due_for_update() const {

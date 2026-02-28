@@ -5,6 +5,7 @@
 #include <nlohmann/json.hpp>
 #include <sstream>
 #include <chrono>
+#include <thread>
 
 using json = nlohmann::json;
 
@@ -117,6 +118,24 @@ bool MihomoClient::reload_config(const std::string& config_path) {
     }
 }
 
+bool MihomoClient::reload_config_and_wait(const std::string& config_path, int max_wait_ms) {
+    if (!reload_config(config_path)) return false;
+
+    // Poll until mihomo has loaded the new config (non-empty proxy groups)
+    auto start = std::chrono::steady_clock::now();
+    while (true) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - start).count();
+        if (elapsed >= max_wait_ms) break;
+
+        auto groups = get_proxy_groups();
+        if (!groups.empty()) return true;
+    }
+    return true; // Return true anyway since reload itself succeeded
+}
+
 // ── Proxy management ────────────────────────────────────────
 
 std::map<std::string, ProxyGroup> MihomoClient::get_proxy_groups() {
@@ -171,9 +190,9 @@ std::map<std::string, ProxyNode> MihomoClient::get_proxy_nodes() {
             ProxyNode node;
             node.name = name;
             node.type = type;
+            node.server = proxy.value("server", "");
+            node.port = proxy.value("port", 0);
             node.alive = proxy.value("alive", true);
-
-            // Extract UDP support flag from the proxy info
             if (proxy.contains("history") && proxy["history"].is_array()) {
                 for (auto& h : proxy["history"]) {
                     int d = h.value("delay", 0);

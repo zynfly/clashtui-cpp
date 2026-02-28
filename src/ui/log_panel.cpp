@@ -106,7 +106,7 @@ void LogPanel::push_log(LogEntry entry) { impl_->push(std::move(entry)); }
 Component LogPanel::component() {
     auto self = impl_.get();
 
-    return Renderer([self] {
+    return Renderer([self](bool /*focused*/) -> Element {
         std::lock_guard<std::mutex> lock(self->log_mutex);
 
         // Header with filter info

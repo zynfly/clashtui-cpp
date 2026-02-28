@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <cstdlib>
+#include <unistd.h>
 
 namespace fs = std::filesystem;
 
@@ -18,16 +19,34 @@ std::string Config::expand_home(const std::string& path) {
 }
 
 Config::Config() {
-    // Set default mihomo config path
-    config_.mihomo_config_path = "~/.config/mihomo/config.yaml";
+    config_.mihomo_config_path = default_mihomo_config_path();
 }
 
 Config::~Config() = default;
 
+bool Config::is_privileged() {
+    return geteuid() == 0;
+}
+
 std::string Config::config_dir() {
+    if (is_privileged()) {
+        return "/etc/clashtui-cpp";
+    }
     const char* home = std::getenv("HOME");
     if (!home) return "";
     return std::string(home) + "/.config/clashtui-cpp";
+}
+
+std::string Config::mihomo_dir() {
+    std::string dir = config_dir();
+    if (dir.empty()) return "";
+    return dir + "/mihomo";
+}
+
+std::string Config::default_mihomo_config_path() {
+    std::string dir = mihomo_dir();
+    if (dir.empty()) return "";
+    return dir + "/config.yaml";
 }
 
 std::string Config::config_path() {
@@ -78,6 +97,12 @@ bool Config::load() {
             config_.mihomo_config_path = mihomo["config_path"].as<std::string>(config_.mihomo_config_path);
             config_.mihomo_binary_path = mihomo["binary_path"].as<std::string>(config_.mihomo_binary_path);
             config_.mihomo_service_name = mihomo["service_name"].as<std::string>(config_.mihomo_service_name);
+
+            // Migrate old-style path to unified layout
+            if (config_.mihomo_config_path == "~/.config/mihomo/config.yaml" ||
+                config_.mihomo_config_path == expand_home("~/.config/mihomo/config.yaml")) {
+                config_.mihomo_config_path = default_mihomo_config_path();
+            }
         }
 
         // Profiles section

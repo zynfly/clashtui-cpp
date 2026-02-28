@@ -168,12 +168,12 @@ public:
                           const std::string& config_dir,
                           std::function<void(UninstallProgress)> on_progress = nullptr);
 
+    /// Get the service file path for a given scope and service name
+    static std::string get_service_file_path(const std::string& service_name, ServiceScope scope);
+
 private:
     /// Helper: build the systemctl command prefix for a given scope
     static std::string systemctl_cmd(ServiceScope scope);
-
-    /// Helper: get the service file path for a given scope and service name
-    static std::string service_file_path(const std::string& service_name, ServiceScope scope);
 
     /// Helper: run a shell command and return exit code
     static int run_command(const std::string& cmd);

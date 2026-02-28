@@ -119,6 +119,22 @@ struct Strings {
 
     // Daemon service
     const char* daemon_service_desc;
+
+    // Service management (extended)
+    const char* service_start;
+    const char* service_stop;
+    const char* service_install;
+    const char* service_remove;
+    const char* service_started;
+    const char* service_stopped;
+    const char* service_removed;
+    const char* service_not_installed;
+
+    // Self-uninstall
+    const char* uninstall_self_title;
+    const char* uninstall_self_confirm;
+    const char* uninstall_self_remove_config;
+    const char* uninstall_self_complete;
 };
 
 #include "i18n/en.hpp"

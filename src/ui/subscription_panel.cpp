@@ -9,6 +9,23 @@
 
 using namespace ftxui;
 
+static constexpr int INTERVAL_OPTIONS[] = {0, 1, 2, 4, 8, 24};
+static constexpr int INTERVAL_COUNT = 6;
+
+static std::string interval_label(int hours) {
+    if (hours <= 0) return "OFF";
+    return std::to_string(hours) + "h";
+}
+
+static int next_interval(int current) {
+    for (int i = 0; i < INTERVAL_COUNT; ++i) {
+        if (INTERVAL_OPTIONS[i] == current) {
+            return INTERVAL_OPTIONS[(i + 1) % INTERVAL_COUNT];
+        }
+    }
+    return INTERVAL_OPTIONS[0];
+}
+
 struct SubscriptionPanel::Impl {
     Callbacks callbacks;
 
@@ -59,6 +76,7 @@ SubscriptionPanel::SubscriptionPanel() : impl_(std::make_unique<Impl>()) {}
 SubscriptionPanel::~SubscriptionPanel() = default;
 
 void SubscriptionPanel::set_callbacks(Callbacks cb) { impl_->callbacks = std::move(cb); }
+void SubscriptionPanel::refresh_profiles() { impl_->refresh_profiles(); }
 
 Component SubscriptionPanel::component() {
     auto self = impl_.get();
@@ -97,6 +115,7 @@ Component SubscriptionPanel::component() {
             text(" ") | size(WIDTH, EQUAL, 3),
             text(" Name") | bold | size(WIDTH, EQUAL, 20),
             text(" URL") | bold | flex,
+            text(" Auto") | bold | size(WIDTH, EQUAL, 6),
             text(" Last Updated") | bold | size(WIDTH, EQUAL, 22),
         }) | inverted);
         rows.push_back(separator());
@@ -112,11 +131,15 @@ Component SubscriptionPanel::component() {
             }
 
             std::string active_mark = is_active ? "[*]" : "   ";
+            int interval = p.auto_update ? p.update_interval_hours : 0;
+            auto interval_str = interval_label(interval);
 
             auto row = hbox({
                 text(active_mark) | size(WIDTH, EQUAL, 3),
                 text(" " + p.name) | size(WIDTH, EQUAL, 20),
                 text(" " + url_display) | flex,
+                text(" " + interval_str) | size(WIDTH, EQUAL, 6)
+                    | (interval > 0 ? color(Color::Green) : color(Color::GrayDark)),
                 text(" " + p.last_updated) | size(WIDTH, EQUAL, 22),
             });
 
@@ -138,6 +161,7 @@ Component SubscriptionPanel::component() {
             text(" [A]") | bold, text(T().sub_add),
             text("  [U]") | bold, text(T().sub_update),
             text("  [D]") | bold, text(T().sub_delete),
+            text("  [T]") | bold, text("Auto"),
             text("  [Enter]") | bold, text(T().profile_switch),
             text("  [Esc]") | bold, text("Back"),
         }) | dim;
@@ -384,6 +408,25 @@ Component SubscriptionPanel::component() {
                     self->refresh_profiles();
                     if (self->callbacks.post_refresh) self->callbacks.post_refresh();
                 }).detach();
+                return true;
+            }
+            // T: cycle auto-update interval
+            if (event.character() == "t" || event.character() == "T") {
+                std::vector<ProfileInfo> profiles;
+                {
+                    std::lock_guard<std::mutex> lock(self->profiles_mutex);
+                    profiles = self->profiles;
+                }
+                if (self->selected >= 0 && self->selected < (int)profiles.size()) {
+                    auto& p = profiles[self->selected];
+                    int current = p.auto_update ? p.update_interval_hours : 0;
+                    int next = next_interval(current);
+                    if (self->callbacks.set_update_interval) {
+                        self->callbacks.set_update_interval(p.name, next);
+                    }
+                    self->refresh_profiles();
+                    if (self->callbacks.post_refresh) self->callbacks.post_refresh();
+                }
                 return true;
             }
             // R: refresh profile list

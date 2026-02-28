@@ -45,6 +45,14 @@ public:
     /// Get the name of the active profile
     std::string active_profile_name() const;
 
+    /// Deploy the active profile to the mihomo config directory.
+    /// Copies the profile YAML to mihomo's config path so mihomo can load it.
+    /// Returns the deployed path (mihomo config path) on success, empty on failure.
+    std::string deploy_active_to_mihomo() const;
+
+    /// Set auto-update interval for a profile (0 = disabled)
+    bool set_update_interval(const std::string& name, int hours);
+
     /// Get profiles that are due for automatic update
     std::vector<std::string> profiles_due_for_update() const;
 

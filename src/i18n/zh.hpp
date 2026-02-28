@@ -119,4 +119,20 @@ inline constexpr Strings ZH_STRINGS_DEF = {
 
     // Daemon service
     "clashtui-cpp 守护进程",
+
+    // Service management (extended)
+    "启动服务",
+    "停止服务",
+    "安装服务",
+    "卸载服务",
+    "服务已启动",
+    "服务已停止",
+    "服务已卸载",
+    "服务未安装",
+
+    // Self-uninstall
+    "卸载 clashtui-cpp",
+    "从系统中移除 clashtui-cpp？",
+    "同时删除配置目录？",
+    "clashtui-cpp 已卸载",
 };

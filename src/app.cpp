@@ -48,6 +48,7 @@ struct App::Impl {
 
     // Cached daemon availability
     std::atomic<bool> daemon_available{false};
+    std::atomic<bool> was_connected{false};  // track connection state transitions
 
     void init_client() {
         client = std::make_unique<MihomoClient>(
@@ -88,7 +89,7 @@ struct App::Impl {
             current_panel = panel;
             // Refresh profile list when switching to subscription panel
             if (panel == 1) {
-                // Trigger a refresh of the subscription panel data
+                subscription_panel.refresh_profiles();
             }
         };
 
@@ -102,6 +103,12 @@ struct App::Impl {
                     bool ok = client->test_connection();
                     status_bar.set_connected(ok);
                     main_screen.set_connected(ok);
+
+                    // Auto-refresh proxy data when connection is restored
+                    if (ok && !was_connected.load()) {
+                        proxy_panel.refresh_data();
+                    }
+                    was_connected.store(ok);
 
                     if (ok) {
                         auto stats = client->get_connections();
@@ -220,9 +227,10 @@ App::App() : impl_(std::make_unique<Impl>()) {
             auto result = impl_->profile_mgr.update_profile(name);
             err = result.error;
             if (result.success && result.was_active && impl_->client) {
-                std::string path = impl_->profile_mgr.active_profile_path();
-                if (!path.empty()) {
-                    impl_->client->reload_config(path);
+                std::string deployed = impl_->profile_mgr.deploy_active_to_mihomo();
+                if (!deployed.empty()) {
+                    impl_->client->reload_config_and_wait(deployed);
+                    impl_->proxy_panel.refresh_data();
                 }
             }
             return result.success;
@@ -238,19 +246,26 @@ App::App() : impl_(std::make_unique<Impl>()) {
         };
 
         scb.switch_profile = [this](const std::string& name, std::string& err) -> bool {
+            bool ok = false;
             if (impl_->daemon_available.load()) {
-                return impl_->daemon_client.switch_profile(name, err);
-            }
-            // Degraded mode: switch locally and reload mihomo
-            if (impl_->profile_mgr.switch_active(name)) {
-                std::string path = impl_->profile_mgr.active_profile_path();
-                if (!path.empty() && impl_->client) {
-                    impl_->client->reload_config(path);
+                ok = impl_->daemon_client.switch_profile(name, err);
+            } else {
+                // Degraded mode: switch locally and reload mihomo
+                if (impl_->profile_mgr.switch_active(name)) {
+                    std::string deployed = impl_->profile_mgr.deploy_active_to_mihomo();
+                    if (!deployed.empty() && impl_->client) {
+                        impl_->client->reload_config_and_wait(deployed);
+                    }
+                    ok = true;
+                } else {
+                    err = "Failed to switch profile";
                 }
-                return true;
             }
-            err = "Failed to switch profile";
-            return false;
+            // Refresh proxy data after profile switch
+            if (ok) {
+                impl_->proxy_panel.refresh_data();
+            }
+            return ok;
         };
 
         scb.get_active_profile = [this]() -> std::string {
@@ -260,10 +275,17 @@ App::App() : impl_(std::make_unique<Impl>()) {
             return impl_->profile_mgr.active_profile_name();
         };
 
+        scb.set_update_interval = [this](const std::string& name, int hours) -> bool {
+            return impl_->profile_mgr.set_update_interval(name, hours);
+        };
+
         scb.post_refresh = [this]() { impl_->screen.Post(Event::Custom); };
 
         impl_->subscription_panel.set_callbacks(std::move(scb));
     }
+
+    // Initial profile data load
+    impl_->subscription_panel.refresh_profiles();
 
     // Setup InstallWizard callbacks
     {

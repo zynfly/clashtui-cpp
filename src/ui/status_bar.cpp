@@ -71,17 +71,13 @@ Component StatusBar::component() {
                           + "↓ " + format_speed(down_speed);
         auto center_text = text(stats);
 
-        // Right: update indicator + connection status
+        // Right: update indicator
         Elements right_elements;
         if (!update_ver.empty()) {
             right_elements.push_back(
                 text(" ↑ " + update_ver + " ") | color(Color::Yellow)
             );
         }
-        auto status_text = is_connected
-            ? text(" ● " + std::string(T().connected) + " ") | color(Color::Green)
-            : text(" ○ " + std::string(T().disconnected) + " ") | color(Color::Red);
-        right_elements.push_back(status_text);
 
         return hbox({
             mode_text,

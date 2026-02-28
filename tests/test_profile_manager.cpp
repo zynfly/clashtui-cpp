@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <cstdlib>
+#include <unistd.h>
 
 namespace fs = std::filesystem;
 
@@ -40,6 +41,7 @@ protected:
 };
 
 TEST_F(ProfileManagerTest, ProfilesDir) {
+    if (geteuid() == 0) GTEST_SKIP() << "Skipped: runs as root, config_dir ignores HOME";
     Config config;
     ProfileManager pm(config);
     std::string expected = temp_dir_ + "/.config/clashtui-cpp/profiles";

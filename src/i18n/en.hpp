@@ -119,4 +119,20 @@ inline constexpr Strings EN_STRINGS_DEF = {
 
     // Daemon service
     "clashtui-cpp Daemon",
+
+    // Service management (extended)
+    "Start Service",
+    "Stop Service",
+    "Install Service",
+    "Remove Service",
+    "Service started",
+    "Service stopped",
+    "Service removed",
+    "Service not installed",
+
+    // Self-uninstall
+    "Uninstall clashtui-cpp",
+    "Remove clashtui-cpp from this system?",
+    "Also remove config directory?",
+    "clashtui-cpp uninstalled",
 };
