@@ -5,6 +5,7 @@
 #include <fstream>
 #include <cstdlib>
 #include <unistd.h>
+#include <pwd.h>
 
 namespace fs = std::filesystem;
 
@@ -33,7 +34,12 @@ std::string Config::config_dir() {
         return "/etc/clashtui-cpp";
     }
     const char* home = std::getenv("HOME");
-    if (!home) return "";
+    if (!home || home[0] == '\0') {
+        // Fallback: get home directory from password database
+        struct passwd* pw = getpwuid(getuid());
+        if (pw && pw->pw_dir) home = pw->pw_dir;
+    }
+    if (!home || home[0] == '\0') return "";
     return std::string(home) + "/.config/clashtui-cpp";
 }
 
@@ -99,8 +105,12 @@ bool Config::load() {
             config_.mihomo_service_name = mihomo["service_name"].as<std::string>(config_.mihomo_service_name);
 
             // Migrate old-style path to unified layout
+            // Match literal "~/.config/mihomo/config.yaml" and expanded forms
+            // like "/home/user/.config/mihomo/config.yaml" or "/root/.config/mihomo/config.yaml"
             if (config_.mihomo_config_path == "~/.config/mihomo/config.yaml" ||
-                config_.mihomo_config_path == expand_home("~/.config/mihomo/config.yaml")) {
+                config_.mihomo_config_path == expand_home("~/.config/mihomo/config.yaml") ||
+                (config_.mihomo_config_path.find("/.config/mihomo/config.yaml") != std::string::npos &&
+                 config_.mihomo_config_path.find("clashtui-cpp") == std::string::npos)) {
                 config_.mihomo_config_path = default_mihomo_config_path();
             }
         }

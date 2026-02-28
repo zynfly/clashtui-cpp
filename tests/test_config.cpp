@@ -49,10 +49,12 @@ TEST_F(ConfigTest, DefaultValues) {
     EXPECT_TRUE(cfg.data().subscriptions.empty());
     EXPECT_EQ(cfg.data().mihomo_binary_path, "/usr/local/bin/mihomo");
     EXPECT_EQ(cfg.data().mihomo_service_name, "mihomo");
+    EXPECT_FALSE(cfg.data().mihomo_config_path.empty());
+    EXPECT_NE(cfg.data().mihomo_config_path.find("mihomo"), std::string::npos);
 }
 
 TEST_F(ConfigTest, ConfigDirPath) {
-    if (geteuid() == 0) GTEST_SKIP() << "Skipped: runs as root, config_dir ignores HOME";
+    if (geteuid() == 0) GTEST_SKIP() << "Skipped: config_dir() returns /etc path when running as root";
     std::string dir = Config::config_dir();
     EXPECT_FALSE(dir.empty());
     EXPECT_NE(dir.find(".config/clashtui-cpp"), std::string::npos);
@@ -65,13 +67,13 @@ TEST_F(ConfigTest, ConfigFilePath) {
 }
 
 TEST_F(ConfigTest, LoadNonExistentReturnsFalse) {
-    if (geteuid() == 0) GTEST_SKIP() << "Skipped: runs as root, config_dir ignores HOME";
+    if (geteuid() == 0) GTEST_SKIP() << "Skipped: config_dir() returns /etc path when running as root";
     Config cfg;
     EXPECT_FALSE(cfg.load());
 }
 
 TEST_F(ConfigTest, SaveAndLoad) {
-    if (geteuid() == 0) GTEST_SKIP() << "Skipped: runs as root, config_dir ignores HOME";
+    if (geteuid() == 0) GTEST_SKIP() << "Skipped: writes to system /etc when running as root";
     // Save
     Config cfg1;
     cfg1.data().api_host = "10.0.0.1";
@@ -108,7 +110,7 @@ TEST_F(ConfigTest, SaveAndLoad) {
 }
 
 TEST_F(ConfigTest, SaveCreatesDirectory) {
-    if (geteuid() == 0) GTEST_SKIP() << "Skipped: runs as root, config_dir ignores HOME";
+    if (geteuid() == 0) GTEST_SKIP() << "Skipped: writes to system /etc when running as root";
     // Remove config dir if it exists
     fs::remove_all(Config::config_dir());
     EXPECT_FALSE(fs::exists(Config::config_dir()));
@@ -119,7 +121,7 @@ TEST_F(ConfigTest, SaveCreatesDirectory) {
 }
 
 TEST_F(ConfigTest, LoadMalformedYamlUsesDefaults) {
-    if (geteuid() == 0) GTEST_SKIP() << "Skipped: runs as root, config_dir ignores HOME";
+    if (geteuid() == 0) GTEST_SKIP() << "Skipped: writes to system /etc when running as root";
     // Write invalid YAML
     fs::create_directories(Config::config_dir());
     std::ofstream out(Config::config_path());

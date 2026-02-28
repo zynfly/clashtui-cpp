@@ -20,6 +20,8 @@ protected:
     std::string temp_dir_;
 
     void SetUp() override {
+        if (geteuid() == 0) GTEST_SKIP() << "Skipped: socket_path() differs when running as root";
+
         const char* home = std::getenv("HOME");
         if (home) original_home_ = home;
 
@@ -96,7 +98,6 @@ protected:
 };
 
 TEST_F(DaemonIPCTest, StatusCommand) {
-    if (geteuid() == 0) GTEST_SKIP() << "Skipped: runs as root, config_dir ignores HOME";
     Config config;
     // Set a nonexistent binary so mihomo won't actually start
     config.data().mihomo_binary_path = "/nonexistent/mihomo";
@@ -120,7 +121,6 @@ TEST_F(DaemonIPCTest, StatusCommand) {
 }
 
 TEST_F(DaemonIPCTest, ProfileListEmpty) {
-    if (geteuid() == 0) GTEST_SKIP() << "Skipped: runs as root, config_dir ignores HOME";
     Config config;
     config.data().mihomo_binary_path = "/nonexistent/mihomo";
     Daemon daemon(config);
@@ -141,7 +141,6 @@ TEST_F(DaemonIPCTest, ProfileListEmpty) {
 }
 
 TEST_F(DaemonIPCTest, UnknownCommand) {
-    if (geteuid() == 0) GTEST_SKIP() << "Skipped: runs as root, config_dir ignores HOME";
     Config config;
     config.data().mihomo_binary_path = "/nonexistent/mihomo";
     Daemon daemon(config);
@@ -161,7 +160,6 @@ TEST_F(DaemonIPCTest, UnknownCommand) {
 }
 
 TEST_F(DaemonIPCTest, ProfileAddEmptyName) {
-    if (geteuid() == 0) GTEST_SKIP() << "Skipped: runs as root, config_dir ignores HOME";
     Config config;
     config.data().mihomo_binary_path = "/nonexistent/mihomo";
     Daemon daemon(config);

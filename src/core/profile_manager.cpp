@@ -105,9 +105,14 @@ bool ProfileManager::save_metadata(const std::vector<ProfileInfo>& profiles) con
         }
         out << YAML::EndSeq;
 
-        std::ofstream fout(path);
+        // Atomic write: write to temp file, then rename
+        std::string tmp = path + ".tmp";
+        std::ofstream fout(tmp);
         if (!fout.is_open()) return false;
         fout << out.c_str();
+        fout.close();
+        if (fout.fail()) return false;
+        fs::rename(tmp, path);
         return true;
     } catch (...) {
         return false;

@@ -189,8 +189,9 @@ TEST_F(InstallerTest, GenerateServiceContentSystem) {
 }
 
 TEST_F(InstallerTest, GenerateServiceContentUser) {
-    auto content = Installer::generate_service_content("/home/user/.local/bin/mihomo", "/home/user/.config/mihomo", ServiceScope::User);
+    auto content = Installer::generate_service_content("/home/user/.local/bin/mihomo", "/home/user/.config/clashtui-cpp/mihomo", ServiceScope::User);
     EXPECT_NE(content.find("\"/home/user/.local/bin/mihomo\""), std::string::npos);
+    EXPECT_NE(content.find("\"/home/user/.config/clashtui-cpp/mihomo\""), std::string::npos);
     EXPECT_NE(content.find("default.target"), std::string::npos);
 }
 

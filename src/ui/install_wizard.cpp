@@ -307,7 +307,9 @@ struct InstallWizard::Impl {
     void do_create_service() {
         join_worker();
         worker = std::thread([this]() {
-            std::string binary_path = get_install_path();
+            std::string binary_path;
+            if (callbacks.get_binary_path) binary_path = callbacks.get_binary_path();
+            if (binary_path.empty()) binary_path = "/usr/local/bin/mihomo";
             std::string config_dir;
             if (callbacks.get_config_path) {
                 auto cfg = Config::expand_home(callbacks.get_config_path());

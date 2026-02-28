@@ -15,6 +15,8 @@ protected:
     std::string temp_dir_;
 
     void SetUp() override {
+        if (geteuid() == 0) GTEST_SKIP() << "Skipped: ProfileManager tests require non-root execution";
+
         // Save original HOME
         const char* home = std::getenv("HOME");
         if (home) original_home_ = home;
@@ -41,7 +43,6 @@ protected:
 };
 
 TEST_F(ProfileManagerTest, ProfilesDir) {
-    if (geteuid() == 0) GTEST_SKIP() << "Skipped: runs as root, config_dir ignores HOME";
     Config config;
     ProfileManager pm(config);
     std::string expected = temp_dir_ + "/.config/clashtui-cpp/profiles";
