@@ -1,0 +1,12 @@
+{
+  "name": "clashtui-cpp",
+  "version": "0.1.0",
+  "dependencies": [
+    "ftxui",
+    "nlohmann-json",
+    "yaml-cpp",
+    "cpp-httplib",
+    "openssl",
+    "gtest"
+  ]
+}

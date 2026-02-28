@@ -1,0 +1,21 @@
+# Build artifacts
+build*/
+compile_commands.json
+
+# vcpkg local install
+vcpkg_installed/
+
+# Claude Code
+.claude/
+CLAUDE.md
+
+# Planning files (local only)
+progress.md
+task_plan.md
+findings.md
+docs/plans/
+
+# OS files
+.DS_Store
+*.swp
+*~
