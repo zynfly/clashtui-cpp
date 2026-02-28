@@ -26,6 +26,7 @@ add_executable(clashtui-cpp
     src/core/installer.cpp
     src/core/subscription.cpp
     src/core/profile_manager.cpp
+    src/core/updater.cpp
     src/daemon/daemon.cpp
     src/daemon/process_manager.cpp
     src/daemon/ipc_client.cpp
@@ -70,6 +71,7 @@ set(LIB_SOURCES
     src/core/installer.cpp
     src/core/subscription.cpp
     src/core/profile_manager.cpp
+    src/core/updater.cpp
     src/daemon/daemon.cpp
     src/daemon/process_manager.cpp
     src/daemon/ipc_client.cpp
