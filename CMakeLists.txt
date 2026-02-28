@@ -44,6 +44,11 @@ target_link_libraries(clashtui-cpp PRIVATE
     OpenSSL::Crypto
 )
 
+# Embed version for self-update checks
+target_compile_definitions(clashtui-cpp PRIVATE
+    APP_VERSION="${PROJECT_VERSION}"
+)
+
 install(TARGETS clashtui-cpp DESTINATION bin)
 
 # ── Tests ────────────────────────────────────────────────────
@@ -97,6 +102,10 @@ target_link_libraries(clashtui-tests PRIVATE
     OpenSSL::Crypto
 )
 
+target_compile_definitions(clashtui-tests PRIVATE
+    APP_VERSION="${PROJECT_VERSION}"
+)
+
 include(GoogleTest)
 gtest_discover_tests(clashtui-tests)
 
@@ -119,6 +128,10 @@ target_link_libraries(clashtui-e2e PRIVATE
     httplib::httplib
     OpenSSL::SSL
     OpenSSL::Crypto
+)
+
+target_compile_definitions(clashtui-e2e PRIVATE
+    APP_VERSION="${PROJECT_VERSION}"
 )
 
 gtest_discover_tests(clashtui-e2e)
