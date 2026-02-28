@@ -16,6 +16,7 @@ public:
     void set_mode(const std::string& mode);
     void set_connections(int count, int64_t upload_speed, int64_t download_speed);
     void set_connected(bool connected);
+    void set_update_available(const std::string& version);
 
 private:
     std::mutex mutex_;
@@ -24,6 +25,7 @@ private:
     int64_t upload_speed_ = 0;
     int64_t download_speed_ = 0;
     std::atomic<bool> connected_{false};
+    std::string update_version_;
 
     static std::string format_speed(int64_t bytes_per_sec);
 };

@@ -11,6 +11,7 @@
 #include "ui/config_panel.hpp"
 #include "ui/status_bar.hpp"
 #include "core/installer.hpp"
+#include "core/updater.hpp"
 #include "i18n/i18n.hpp"
 
 #include <ftxui/component/screen_interactive.hpp>
@@ -321,6 +322,16 @@ App::~App() {
 void App::run() {
     // Start background threads
     impl_->start_status_thread();
+
+    // Check for updates in background
+    std::thread([this] {
+        Updater updater;
+        auto info = updater.check_for_update();
+        if (info.available) {
+            impl_->status_bar.set_update_available(info.latest_version);
+            impl_->screen.Post(Event::Custom);
+        }
+    }).detach();
 
     // Run the TUI
     impl_->screen.Loop(impl_->main_screen.component());
