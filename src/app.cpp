@@ -228,10 +228,12 @@ App::App() : impl_(std::make_unique<Impl>()) {
             err = result.error;
             if (result.success && result.was_active && impl_->client) {
                 std::string deployed = impl_->profile_mgr.deploy_active_to_mihomo();
-                if (!deployed.empty()) {
-                    impl_->client->reload_config_and_wait(deployed);
-                    impl_->proxy_panel.refresh_data();
+                if (deployed.empty()) {
+                    err = "Failed to deploy profile to mihomo";
+                    return false;
                 }
+                impl_->client->reload_config_and_wait(deployed);
+                impl_->proxy_panel.refresh_data();
             }
             return result.success;
         };
@@ -253,10 +255,14 @@ App::App() : impl_(std::make_unique<Impl>()) {
                 // Degraded mode: switch locally and reload mihomo
                 if (impl_->profile_mgr.switch_active(name)) {
                     std::string deployed = impl_->profile_mgr.deploy_active_to_mihomo();
-                    if (!deployed.empty() && impl_->client) {
-                        impl_->client->reload_config_and_wait(deployed);
+                    if (deployed.empty()) {
+                        err = "Failed to deploy profile to mihomo";
+                    } else {
+                        if (impl_->client) {
+                            impl_->client->reload_config_and_wait(deployed);
+                        }
+                        ok = true;
                     }
-                    ok = true;
                 } else {
                     err = "Failed to switch profile";
                 }

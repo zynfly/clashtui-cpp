@@ -51,7 +51,8 @@ std::string ProfileManager::metadata_path() const {
 
 std::string ProfileManager::now_timestamp() {
     auto t = std::time(nullptr);
-    auto tm = *std::localtime(&t);
+    std::tm tm{};
+    localtime_r(&t, &tm);
     std::ostringstream oss;
     oss << std::put_time(&tm, "%Y-%m-%dT%H:%M:%S");
     return oss.str();

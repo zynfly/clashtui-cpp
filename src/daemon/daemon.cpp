@@ -189,9 +189,11 @@ std::string Daemon::handle_command(const std::string& json_line) {
 
         if (cmd == "mihomo_start") {
             std::string binary = Config::expand_home(config_.data().mihomo_binary_path);
-            std::string config_dir = fs::path(
-                Config::expand_home(config_.data().mihomo_config_path)).parent_path().string();
-            if (process_mgr_.start(binary, {"-d", config_dir})) {
+            std::string mihomo_dir = Config::mihomo_dir();
+            if (mihomo_dir.empty()) {
+                return json({{"ok", false}, {"error", "Cannot determine mihomo directory"}}).dump();
+            }
+            if (process_mgr_.start(binary, {"-d", mihomo_dir})) {
                 wait_for_mihomo();
                 return json({{"ok", true}}).dump();
             }
@@ -274,12 +276,11 @@ int Daemon::run() {
 
     // 2. Start mihomo process
     std::string binary = Config::expand_home(config_.data().mihomo_binary_path);
-    std::string config_path = Config::expand_home(config_.data().mihomo_config_path);
-    std::string config_dir = fs::path(config_path).parent_path().string();
+    std::string mihomo_dir = Config::mihomo_dir();
 
     process_mgr_.set_auto_restart(true);
-    if (!binary.empty() && fs::exists(binary)) {
-        process_mgr_.start(binary, {"-d", config_dir});
+    if (!binary.empty() && fs::exists(binary) && !mihomo_dir.empty()) {
+        process_mgr_.start(binary, {"-d", mihomo_dir});
     }
 
     // 3. Wait for mihomo API

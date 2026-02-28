@@ -77,7 +77,8 @@ struct LogPanel::Impl {
     void export_logs() {
         std::lock_guard<std::mutex> lock(log_mutex);
         auto t = std::time(nullptr);
-        auto tm = *std::localtime(&t);
+        std::tm tm{};
+        localtime_r(&t, &tm);
         std::ostringstream oss;
         oss << "clashtui-logs-" << std::put_time(&tm, "%Y%m%d-%H%M%S") << ".log";
 

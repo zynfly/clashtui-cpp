@@ -231,7 +231,7 @@ struct ProxyPanel::Impl {
     }
 };
 
-ProxyPanel::ProxyPanel() : impl_(std::make_unique<Impl>()) {}
+ProxyPanel::ProxyPanel() : impl_(std::make_shared<Impl>()) {}
 ProxyPanel::~ProxyPanel() = default;
 
 void ProxyPanel::set_callbacks(Callbacks cb) { impl_->callbacks = std::move(cb); }
@@ -264,7 +264,9 @@ void ProxyPanel::refresh_data() {
 }
 
 Component ProxyPanel::component() {
-    auto self = impl_.get();
+    // Capture shared_ptr so detached threads keep Impl alive
+    auto sp = impl_;
+    auto* self = sp.get();
 
     return Renderer([self](bool /*focused*/) -> Element {
         std::lock_guard<std::mutex> lock(self->data_mutex);
@@ -273,7 +275,7 @@ Component ProxyPanel::component() {
             self->render_nodes(),
             self->render_details(),
         });
-    }) | CatchEvent([self](Event event) -> bool {
+    }) | CatchEvent([self, sp](Event event) -> bool {
         // Tab / Left / Right: switch focus column
         if (event == Event::Tab) {
             self->focus_column = (self->focus_column + 1) % 3;
@@ -320,13 +322,12 @@ Component ProxyPanel::component() {
                 if (g && self->selected_node >= 0 && self->selected_node < (int)names.size()) {
                     std::string group = g->name;
                     std::string proxy = names[self->selected_node];
-                    // Run in background to avoid blocking UI
-                    std::thread([self, group, proxy]() {
-                        self->callbacks.select_proxy(group, proxy);
-                        // Update the group's now field locally
-                        std::lock_guard<std::mutex> lock(self->data_mutex);
-                        auto it = self->groups.find(group);
-                        if (it != self->groups.end()) {
+                    // Capture shared_ptr to prevent use-after-free
+                    std::thread([sp, group, proxy]() {
+                        sp->callbacks.select_proxy(group, proxy);
+                        std::lock_guard<std::mutex> lock(sp->data_mutex);
+                        auto it = sp->groups.find(group);
+                        if (it != sp->groups.end()) {
                             it->second.now = proxy;
                         }
                     }).detach();
@@ -342,12 +343,15 @@ Component ProxyPanel::component() {
                 auto names = self->current_node_names();
                 if (self->selected_node >= 0 && self->selected_node < (int)names.size()) {
                     std::string name = names[self->selected_node];
-                    std::thread([self, name]() {
-                        auto result = self->callbacks.test_delay(name);
-                        std::lock_guard<std::mutex> lock(self->data_mutex);
-                        auto it = self->nodes.find(name);
-                        if (it != self->nodes.end()) {
+                    std::thread([sp, name]() {
+                        auto result = sp->callbacks.test_delay(name);
+                        std::lock_guard<std::mutex> lock(sp->data_mutex);
+                        auto it = sp->nodes.find(name);
+                        if (it != sp->nodes.end()) {
                             it->second.delay = result.success ? result.delay : 0;
+                            if (it->second.delay_history.size() >= 100) {
+                                it->second.delay_history.erase(it->second.delay_history.begin());
+                            }
                             it->second.delay_history.push_back(it->second.delay);
                         }
                     }).detach();
@@ -362,12 +366,15 @@ Component ProxyPanel::component() {
                 std::lock_guard<std::mutex> lock(self->data_mutex);
                 auto names = self->current_node_names();
                 for (const auto& name : names) {
-                    std::thread([self, name]() {
-                        auto result = self->callbacks.test_delay(name);
-                        std::lock_guard<std::mutex> lock(self->data_mutex);
-                        auto it = self->nodes.find(name);
-                        if (it != self->nodes.end()) {
+                    std::thread([sp, name]() {
+                        auto result = sp->callbacks.test_delay(name);
+                        std::lock_guard<std::mutex> lock(sp->data_mutex);
+                        auto it = sp->nodes.find(name);
+                        if (it != sp->nodes.end()) {
                             it->second.delay = result.success ? result.delay : 0;
+                            if (it->second.delay_history.size() >= 100) {
+                                it->second.delay_history.erase(it->second.delay_history.begin());
+                            }
                             it->second.delay_history.push_back(it->second.delay);
                         }
                     }).detach();
@@ -379,17 +386,17 @@ Component ProxyPanel::component() {
         // R: refresh data
         if (event.is_character() && (event.character() == "r" || event.character() == "R")) {
             if (self->callbacks.get_groups && self->callbacks.get_nodes) {
-                std::thread([self]() {
-                    auto groups = self->callbacks.get_groups();
-                    auto nodes = self->callbacks.get_nodes();
-                    std::lock_guard<std::mutex> lock(self->data_mutex);
-                    self->groups = std::move(groups);
-                    self->nodes = std::move(nodes);
-                    self->group_names.clear();
-                    for (auto& [name, _] : self->groups) {
-                        self->group_names.push_back(name);
+                std::thread([sp]() {
+                    auto groups = sp->callbacks.get_groups();
+                    auto nodes = sp->callbacks.get_nodes();
+                    std::lock_guard<std::mutex> lock(sp->data_mutex);
+                    sp->groups = std::move(groups);
+                    sp->nodes = std::move(nodes);
+                    sp->group_names.clear();
+                    for (auto& [name, _] : sp->groups) {
+                        sp->group_names.push_back(name);
                     }
-                    std::sort(self->group_names.begin(), self->group_names.end());
+                    std::sort(sp->group_names.begin(), sp->group_names.end());
                 }).detach();
             }
             return true;

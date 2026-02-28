@@ -9,6 +9,23 @@
 
 using json = nlohmann::json;
 
+// Percent-encode a string for safe use in URL path segments
+static std::string url_encode_path(const std::string& value) {
+    std::string result;
+    result.reserve(value.size() * 2);
+    for (unsigned char c : value) {
+        if (std::isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+            result += static_cast<char>(c);
+        } else {
+            static const char hex[] = "0123456789ABCDEF";
+            result += '%';
+            result += hex[c >> 4];
+            result += hex[c & 0x0F];
+        }
+    }
+    return result;
+}
+
 struct MihomoClient::Impl {
     std::string host;
     int port;
@@ -214,7 +231,7 @@ bool MihomoClient::select_proxy(const std::string& group, const std::string& pro
         auto cli = impl_->make_client();
         json body;
         body["name"] = proxy;
-        std::string path = "/proxies/" + group;
+        std::string path = "/proxies/" + url_encode_path(group);
         auto res = cli->Put(path, impl_->auth_headers(),
                             body.dump(), "application/json");
         return res && (res->status == 200 || res->status == 204);
@@ -233,8 +250,8 @@ DelayResult MihomoClient::test_delay(const std::string& proxy_name,
         // Set a longer read timeout for delay testing
         cli->set_read_timeout(timeout_ms / 1000 + 2, 0);
 
-        std::string path = "/proxies/" + proxy_name + "/delay"
-                           "?url=" + test_url +
+        std::string path = "/proxies/" + url_encode_path(proxy_name) + "/delay"
+                           "?url=" + url_encode_path(test_url) +
                            "&timeout=" + std::to_string(timeout_ms);
         auto res = cli->Get(path, impl_->auth_headers());
 

@@ -72,14 +72,16 @@ struct SubscriptionPanel::Impl {
     }
 };
 
-SubscriptionPanel::SubscriptionPanel() : impl_(std::make_unique<Impl>()) {}
+SubscriptionPanel::SubscriptionPanel() : impl_(std::make_shared<Impl>()) {}
 SubscriptionPanel::~SubscriptionPanel() = default;
 
 void SubscriptionPanel::set_callbacks(Callbacks cb) { impl_->callbacks = std::move(cb); }
 void SubscriptionPanel::refresh_profiles() { impl_->refresh_profiles(); }
 
 Component SubscriptionPanel::component() {
-    auto self = impl_.get();
+    // Capture shared_ptr so detached threads keep Impl alive
+    auto sp = impl_;
+    auto* self = sp.get();
 
     // Input components for add/edit dialog
     auto name_input = Input(&self->input_name, "Name");
@@ -217,7 +219,7 @@ Component SubscriptionPanel::component() {
         }
 
         return vbox(std::move(content)) | border;
-    }) | CatchEvent([self](Event event) -> bool {
+    }) | CatchEvent([self, sp](Event event) -> bool {
         // Handle dialog modes
         if (self->show_add_dialog) {
             if (event == Event::Return) {
@@ -228,24 +230,24 @@ Component SubscriptionPanel::component() {
                     self->input_name.clear();
                     self->input_url.clear();
 
-                    // Run in background thread
-                    std::thread([self, name, url]() {
-                        self->set_notification(std::string(T().sub_downloading));
-                        if (self->callbacks.post_refresh) self->callbacks.post_refresh();
+                    // Run in background thread (capture shared_ptr for safety)
+                    std::thread([sp, name, url]() {
+                        sp->set_notification(std::string(T().sub_downloading));
+                        if (sp->callbacks.post_refresh) sp->callbacks.post_refresh();
 
                         std::string err;
                         bool ok = false;
-                        if (self->callbacks.add_profile) {
-                            ok = self->callbacks.add_profile(name, url, err);
+                        if (sp->callbacks.add_profile) {
+                            ok = sp->callbacks.add_profile(name, url, err);
                         }
 
                         if (ok) {
-                            self->set_notification(std::string(T().sub_success));
-                            self->refresh_profiles();
+                            sp->set_notification(std::string(T().sub_success));
+                            sp->refresh_profiles();
                         } else {
-                            self->set_notification(std::string(T().sub_failed) + ": " + err);
+                            sp->set_notification(std::string(T().sub_failed) + ": " + err);
                         }
-                        if (self->callbacks.post_refresh) self->callbacks.post_refresh();
+                        if (sp->callbacks.post_refresh) sp->callbacks.post_refresh();
                     }).detach();
                 } else {
                     self->show_add_dialog = false;
@@ -316,19 +318,19 @@ Component SubscriptionPanel::component() {
             }
             if (self->selected >= 0 && self->selected < (int)profiles.size()) {
                 std::string name = profiles[self->selected].name;
-                std::thread([self, name]() {
+                std::thread([sp, name]() {
                     std::string err;
                     bool ok = false;
-                    if (self->callbacks.switch_profile) {
-                        ok = self->callbacks.switch_profile(name, err);
+                    if (sp->callbacks.switch_profile) {
+                        ok = sp->callbacks.switch_profile(name, err);
                     }
                     if (ok) {
-                        self->set_notification(std::string(T().profile_switch_success));
-                        self->refresh_profiles();
+                        sp->set_notification(std::string(T().profile_switch_success));
+                        sp->refresh_profiles();
                     } else {
-                        self->set_notification(std::string(T().sub_failed) + ": " + err);
+                        sp->set_notification(std::string(T().sub_failed) + ": " + err);
                     }
-                    if (self->callbacks.post_refresh) self->callbacks.post_refresh();
+                    if (sp->callbacks.post_refresh) sp->callbacks.post_refresh();
                 }).detach();
             }
             return true;
@@ -357,56 +359,56 @@ Component SubscriptionPanel::component() {
                 }
                 if (self->selected >= 0 && self->selected < (int)profiles.size()) {
                     std::string name = profiles[self->selected].name;
-                    std::thread([self, name]() {
-                        self->set_notification(std::string(T().profile_updating));
-                        if (self->callbacks.post_refresh) self->callbacks.post_refresh();
+                    std::thread([sp, name]() {
+                        sp->set_notification(std::string(T().profile_updating));
+                        if (sp->callbacks.post_refresh) sp->callbacks.post_refresh();
 
                         std::string err;
                         bool ok = false;
-                        if (self->callbacks.update_profile) {
-                            ok = self->callbacks.update_profile(name, err);
+                        if (sp->callbacks.update_profile) {
+                            ok = sp->callbacks.update_profile(name, err);
                         }
 
                         if (ok) {
-                            self->set_notification(std::string(T().sub_success));
-                            self->refresh_profiles();
+                            sp->set_notification(std::string(T().sub_success));
+                            sp->refresh_profiles();
                         } else {
-                            self->set_notification(std::string(T().sub_failed) + ": " + err);
+                            sp->set_notification(std::string(T().sub_failed) + ": " + err);
                         }
-                        if (self->callbacks.post_refresh) self->callbacks.post_refresh();
+                        if (sp->callbacks.post_refresh) sp->callbacks.post_refresh();
                     }).detach();
                 }
                 return true;
             }
             // Shift+U: update all profiles
             if (event.character() == "U") {
-                std::thread([self]() {
-                    self->set_notification(std::string(T().profile_updating_all));
-                    if (self->callbacks.post_refresh) self->callbacks.post_refresh();
+                std::thread([sp]() {
+                    sp->set_notification(std::string(T().profile_updating_all));
+                    if (sp->callbacks.post_refresh) sp->callbacks.post_refresh();
 
                     std::vector<ProfileInfo> profiles;
                     {
-                        std::lock_guard<std::mutex> lock(self->profiles_mutex);
-                        profiles = self->profiles;
+                        std::lock_guard<std::mutex> lock(sp->profiles_mutex);
+                        profiles = sp->profiles;
                     }
 
                     bool all_ok = true;
                     for (const auto& p : profiles) {
                         std::string err;
-                        if (self->callbacks.update_profile) {
-                            if (!self->callbacks.update_profile(p.name, err)) {
+                        if (sp->callbacks.update_profile) {
+                            if (!sp->callbacks.update_profile(p.name, err)) {
                                 all_ok = false;
                             }
                         }
                     }
 
                     if (all_ok) {
-                        self->set_notification(std::string(T().sub_success));
+                        sp->set_notification(std::string(T().sub_success));
                     } else {
-                        self->set_notification(std::string(T().sub_failed));
+                        sp->set_notification(std::string(T().sub_failed));
                     }
-                    self->refresh_profiles();
-                    if (self->callbacks.post_refresh) self->callbacks.post_refresh();
+                    sp->refresh_profiles();
+                    if (sp->callbacks.post_refresh) sp->callbacks.post_refresh();
                 }).detach();
                 return true;
             }

@@ -15,6 +15,19 @@
 namespace fs = std::filesystem;
 using namespace ftxui;
 
+static std::string shell_quote(const std::string& s) {
+    std::string result = "'";
+    for (char c : s) {
+        if (c == '\'') {
+            result += "'\\''";
+        } else {
+            result += c;
+        }
+    }
+    result += "'";
+    return result;
+}
+
 // ── State machine ───────────────────────────────────────────────
 
 enum class WizardMode {
@@ -478,7 +491,7 @@ struct InstallWizard::Impl {
             if (!self_binary.empty() && fs::exists(self_binary)) {
                 bool needs_sudo = (self_binary.find("/usr/") == 0);
                 if (needs_sudo) {
-                    std::string cmd = "sudo rm -f '" + self_binary + "'";
+                    std::string cmd = "sudo rm -f " + shell_quote(self_binary);
                     (void)std::system(cmd.c_str());
                 } else {
                     std::error_code ec;
@@ -505,7 +518,6 @@ struct InstallWizard::Impl {
     // ── Perform initial check ───────────────────────────────────
 
     void do_check() {
-        initial_check_done = true;
         bool installed = false;
         if (callbacks.is_installed) {
             installed = callbacks.is_installed();
@@ -898,9 +910,13 @@ Component InstallWizard::component() {
     auto self = impl_.get();
 
     return Renderer([self](bool /*focused*/) -> Element {
-        // Auto-transition from Check mode (runs once, then mode changes)
+        // Auto-transition from Check mode: run in background thread to avoid blocking UI
         if (self->mode == WizardMode::Check && !self->initial_check_done) {
-            self->do_check();
+            self->initial_check_done = true;
+            self->join_worker();
+            self->worker = std::thread([self]() {
+                self->do_check();
+            });
         }
 
         Element body;

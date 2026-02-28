@@ -36,7 +36,7 @@ public:
 private:
     std::string binary_path_;
     std::vector<std::string> args_;
-    pid_t child_pid_ = -1;
+    std::atomic<pid_t> child_pid_{-1};
     std::atomic<bool> auto_restart_{true};
     std::atomic<bool> stop_requested_{false};
     std::atomic<bool> monitor_running_{false};

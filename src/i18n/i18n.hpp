@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+
 enum class Lang { EN, ZH };
 
 struct Strings {
@@ -142,8 +144,8 @@ struct Strings {
 
 inline const Strings EN_STRINGS = EN_STRINGS_DEF;
 inline const Strings ZH_STRINGS = ZH_STRINGS_DEF;
-inline Lang current_lang = Lang::ZH;
+inline std::atomic<Lang> current_lang{Lang::ZH};
 
 inline const Strings& T() {
-    return current_lang == Lang::ZH ? ZH_STRINGS : EN_STRINGS;
+    return current_lang.load() == Lang::ZH ? ZH_STRINGS : EN_STRINGS;
 }
