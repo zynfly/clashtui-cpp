@@ -60,11 +60,9 @@ jobs:
 
       - name: Package
         run: |
-          VERSION=${GITHUB_REF_NAME}
-          ARCHIVE="clashtui-cpp-${VERSION}-linux-${{ matrix.arch }}.tar.gz"
+          ARCHIVE="clashtui-cpp-linux-${{ matrix.arch }}.tar.gz"
           tar czf "${ARCHIVE}" -C build clashtui-cpp
           sha256sum "${ARCHIVE}" > "${ARCHIVE}.sha256"
-          echo "ARCHIVE=${ARCHIVE}" >> $GITHUB_ENV
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
