@@ -86,6 +86,7 @@ add_executable(clashtui-tests
     tests/test_profile_manager.cpp
     tests/test_process_manager.cpp
     tests/test_daemon_ipc.cpp
+    tests/test_updater.cpp
     ${LIB_SOURCES}
 )
 
