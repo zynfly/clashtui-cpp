@@ -43,6 +43,10 @@ std::string Config::config_dir() {
     return std::string(home) + "/.config/clashtui-cpp";
 }
 
+std::string Config::system_config_dir() {
+    return "/etc/clashtui-cpp";
+}
+
 std::string Config::mihomo_dir() {
     std::string dir = config_dir();
     if (dir.empty()) return "";
@@ -63,8 +67,15 @@ std::string Config::config_path() {
 
 bool Config::load() {
     std::string path = config_path();
+
+    // Fallback: if user config doesn't exist, try system config (read-only)
     if (path.empty() || !fs::exists(path)) {
-        return false;
+        std::string sys_path = system_config_dir() + "/config.yaml";
+        if (fs::exists(sys_path)) {
+            path = sys_path;
+        } else {
+            return false;
+        }
     }
 
     try {

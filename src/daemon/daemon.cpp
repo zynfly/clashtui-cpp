@@ -65,8 +65,8 @@ bool Daemon::start_ipc_server() {
         return false;
     }
 
-    // Restrict permissions to owner only
-    chmod(path.c_str(), 0600);
+    // Allow non-root users to connect to daemon socket
+    chmod(path.c_str(), 0666);
 
     if (listen(socket_fd_, 5) < 0) {
         close(socket_fd_);

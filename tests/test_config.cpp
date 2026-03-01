@@ -66,10 +66,15 @@ TEST_F(ConfigTest, ConfigFilePath) {
     EXPECT_NE(path.find("config.yaml"), std::string::npos);
 }
 
-TEST_F(ConfigTest, LoadNonExistentReturnsFalse) {
+TEST_F(ConfigTest, LoadNonExistentReturnsFalseOrFallback) {
     if (geteuid() == 0) GTEST_SKIP() << "Skipped: config_dir() returns /etc path when running as root";
     Config cfg;
-    EXPECT_FALSE(cfg.load());
+    bool loaded = cfg.load();
+    // If /etc/clashtui-cpp/config.yaml exists, load() succeeds via fallback
+    // Otherwise it returns false — both are correct behavior
+    namespace fs = std::filesystem;
+    bool sys_exists = fs::exists(Config::system_config_dir() + "/config.yaml");
+    EXPECT_EQ(loaded, sys_exists);
 }
 
 TEST_F(ConfigTest, SaveAndLoad) {
@@ -118,6 +123,22 @@ TEST_F(ConfigTest, SaveCreatesDirectory) {
     Config cfg;
     ASSERT_TRUE(cfg.save());
     EXPECT_TRUE(fs::exists(Config::config_dir()));
+}
+
+TEST(ConfigStatic, SystemConfigDir) {
+    std::string dir = Config::system_config_dir();
+    EXPECT_EQ(dir, "/etc/clashtui-cpp");
+}
+
+TEST_F(ConfigTest, LoadFallsBackToSystemConfig) {
+    if (geteuid() == 0) GTEST_SKIP() << "Skipped: not meaningful when running as root";
+
+    // User config does not exist (HOME is temp dir)
+    // System config may or may not exist, but load() should not crash
+    Config cfg;
+    cfg.load();
+    // Defaults should be intact regardless
+    EXPECT_EQ(cfg.data().api_host, "127.0.0.1");
 }
 
 TEST_F(ConfigTest, LoadMalformedYamlUsesDefaults) {

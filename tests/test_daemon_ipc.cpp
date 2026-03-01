@@ -121,6 +121,11 @@ TEST_F(DaemonIPCTest, StatusCommand) {
 }
 
 TEST_F(DaemonIPCTest, ProfileListEmpty) {
+    // If system profiles exist on this machine, fallback returns them
+    if (fs::exists(Config::system_config_dir() + "/profiles")) {
+        GTEST_SKIP() << "Skipped: system profiles exist, fallback returns them";
+    }
+
     Config config;
     config.data().mihomo_binary_path = "/nonexistent/mihomo";
     Daemon daemon(config);

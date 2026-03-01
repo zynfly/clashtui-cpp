@@ -18,8 +18,22 @@ ProfileManager::ProfileManager(Config& config) : config_(config) {}
 
 std::string ProfileManager::profiles_dir() const {
     std::string dir = Config::config_dir();
-    if (dir.empty()) return "";
-    return dir + "/profiles";
+    if (!dir.empty()) {
+        std::string path = dir + "/profiles";
+        if (fs::exists(path)) {
+            return path;
+        }
+    }
+
+    // Fall back to system profiles dir (read-only for non-root)
+    std::string sys_path = Config::system_config_dir() + "/profiles";
+    if (fs::exists(sys_path)) {
+        return sys_path;
+    }
+
+    // Neither exists; return default user path (will be created on write)
+    if (!dir.empty()) return dir + "/profiles";
+    return "";
 }
 
 std::string ProfileManager::sanitize_filename(const std::string& name) {

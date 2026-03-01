@@ -50,6 +50,7 @@ public:
 
     static bool is_privileged();
     static std::string config_dir();
+    static std::string system_config_dir();
     static std::string config_path();
     static std::string mihomo_dir();
     static std::string default_mihomo_config_path();

@@ -45,11 +45,21 @@ protected:
 TEST_F(ProfileManagerTest, ProfilesDir) {
     Config config;
     ProfileManager pm(config);
-    std::string expected = temp_dir_ + "/.config/clashtui-cpp/profiles";
-    EXPECT_EQ(pm.profiles_dir(), expected);
+    std::string user_path = temp_dir_ + "/.config/clashtui-cpp/profiles";
+    std::string sys_path = Config::system_config_dir() + "/profiles";
+    // If system profiles dir exists, fallback returns it; otherwise user path
+    if (fs::exists(sys_path)) {
+        EXPECT_EQ(pm.profiles_dir(), sys_path);
+    } else {
+        EXPECT_EQ(pm.profiles_dir(), user_path);
+    }
 }
 
 TEST_F(ProfileManagerTest, EmptyListInitially) {
+    // If system profiles exist on this machine, list won't be empty (fallback)
+    if (fs::exists(Config::system_config_dir() + "/profiles")) {
+        GTEST_SKIP() << "Skipped: system profiles exist, fallback returns them";
+    }
     Config config;
     ProfileManager pm(config);
     auto profiles = pm.list_profiles();

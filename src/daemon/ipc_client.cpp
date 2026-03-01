@@ -10,9 +10,24 @@
 using json = nlohmann::json;
 
 std::string DaemonClient::socket_path() const {
+    // Try user-specific path first
     std::string dir = Config::config_dir();
-    if (dir.empty()) return "";
-    return dir + "/clashtui.sock";
+    if (!dir.empty()) {
+        std::string path = dir + "/clashtui.sock";
+        if (access(path.c_str(), F_OK) == 0) {
+            return path;
+        }
+    }
+
+    // Fall back to system path (daemon running as root)
+    std::string sys_path = Config::system_config_dir() + "/clashtui.sock";
+    if (access(sys_path.c_str(), F_OK) == 0) {
+        return sys_path;
+    }
+
+    // Neither exists; return default user path
+    if (!dir.empty()) return dir + "/clashtui.sock";
+    return "";
 }
 
 json DaemonClient::send_command(const json& cmd) {
