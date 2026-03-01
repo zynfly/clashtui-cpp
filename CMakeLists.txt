@@ -27,6 +27,7 @@ add_executable(clashtui-cpp
     src/core/subscription.cpp
     src/core/profile_manager.cpp
     src/core/updater.cpp
+    src/core/cli.cpp
     src/daemon/daemon.cpp
     src/daemon/process_manager.cpp
     src/daemon/ipc_client.cpp
@@ -72,6 +73,7 @@ set(LIB_SOURCES
     src/core/subscription.cpp
     src/core/profile_manager.cpp
     src/core/updater.cpp
+    src/core/cli.cpp
     src/daemon/daemon.cpp
     src/daemon/process_manager.cpp
     src/daemon/ipc_client.cpp
@@ -87,6 +89,7 @@ add_executable(clashtui-tests
     tests/test_process_manager.cpp
     tests/test_daemon_ipc.cpp
     tests/test_updater.cpp
+    tests/test_cli.cpp
     ${LIB_SOURCES}
 )
 

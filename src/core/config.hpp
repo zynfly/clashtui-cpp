@@ -30,6 +30,9 @@ struct AppConfig {
     std::string mihomo_binary_path = "/usr/local/bin/mihomo";
     std::string mihomo_service_name = "mihomo";
 
+    // Proxy
+    bool proxy_enabled = false;  // remembered on/off state for shell init
+
     // Profiles (daemon mode)
     std::string active_profile;  // name of the currently active profile
 };

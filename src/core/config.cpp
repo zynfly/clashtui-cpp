@@ -115,6 +115,11 @@ bool Config::load() {
             }
         }
 
+        // Proxy section
+        if (auto proxy = root["proxy"]) {
+            config_.proxy_enabled = proxy["enabled"].as<bool>(config_.proxy_enabled);
+        }
+
         // Profiles section
         if (auto profiles = root["profiles"]) {
             config_.active_profile = profiles["active"].as<std::string>(config_.active_profile);
@@ -172,6 +177,11 @@ bool Config::save() {
         out << YAML::Key << "service_name" << YAML::Value << config_.mihomo_service_name;
         out << YAML::EndMap;
 
+        // Proxy section
+        out << YAML::Key << "proxy" << YAML::Value << YAML::BeginMap;
+        out << YAML::Key << "enabled" << YAML::Value << config_.proxy_enabled;
+        out << YAML::EndMap;
+
         // Profiles section
         out << YAML::Key << "profiles" << YAML::Value << YAML::BeginMap;
         out << YAML::Key << "active" << YAML::Value << config_.active_profile;
@@ -179,9 +189,14 @@ bool Config::save() {
 
         out << YAML::EndMap;
 
-        std::ofstream fout(path);
+        // Atomic write: write to temp file, then rename
+        std::string tmp = path + ".tmp";
+        std::ofstream fout(tmp);
         if (!fout.is_open()) return false;
         fout << out.c_str();
+        fout.close();
+        if (fout.fail()) return false;
+        fs::rename(tmp, path);
         return true;
     } catch (...) {
         return false;

@@ -44,7 +44,7 @@ Subscription::DownloadResult Subscription::download(const std::string& url) {
 
     try {
         httplib::Headers headers = {
-            {"User-Agent", "clash"}
+            {"User-Agent", "clash.meta"}
         };
 
         if (scheme == "https") {

@@ -10,7 +10,7 @@ Terminal UI for managing [Clash/Mihomo](https://github.com/MetaCubeX/mihomo) pro
 │  [SELECT]       │    Node B [45ms]  │  Server: xxx          │
 │  [FALLBACK]     │    Node C [?]     │  Latency: ▂▄▆▃▅      │
 ├─────────────────┴────────────────────┴───────────────────────┤
-│ [S]Sub  [I]Install  [L]Log  [C]Config  [F1-F3]Mode  [Q]Quit │
+│ [S]Sub  [I]Install  [L]Log  [C]Config  [Alt+1-3]Mode [Q]Quit│
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -21,6 +21,7 @@ Terminal UI for managing [Clash/Mihomo](https://github.com/MetaCubeX/mihomo) pro
 - **Real-Time Logs** — Colored, filterable, freeze/export
 - **Install Wizard** — Download mihomo binary, SHA256 verify, systemd setup
 - **Daemon Mode** — `--daemon` manages mihomo process lifecycle via IPC
+- **CLI Proxy Control** — `proxy on/off` sets shell environment variables, persists across sessions
 - **Bilingual** — English / 中文, runtime switchable (Ctrl+L)
 - **Auto-Update Check** — Status bar notification when new version available
 
@@ -50,11 +51,52 @@ clashtui-cpp
 clashtui-cpp --daemon
 ```
 
+### Shell Integration (Proxy Control)
+
+Add to your `~/.bashrc` or `~/.zshrc` (one-time setup):
+
+```bash
+# For bash
+eval "$(clashtui-cpp init bash)"
+
+# For zsh
+eval "$(clashtui-cpp init zsh)"
+```
+
+Then use:
+
+```bash
+clashtui-cpp proxy on      # Set proxy env vars, new shells auto-enable too
+clashtui-cpp proxy off     # Unset proxy env vars, new shells stay clean
+clashtui-cpp proxy status  # Show current proxy ports and env vars
+```
+
+Without shell init, use eval manually:
+
+```bash
+eval "$(clashtui-cpp proxy env)"
+```
+
+### CLI Commands
+
+```
+clashtui-cpp                Launch TUI (default)
+clashtui-cpp daemon         Run as background daemon
+clashtui-cpp proxy on       Enable proxy (sets env vars + remembers)
+clashtui-cpp proxy off      Disable proxy (unsets env vars + remembers)
+clashtui-cpp proxy env      Print export commands (no state change)
+clashtui-cpp proxy status   Show proxy ports and env var status
+clashtui-cpp status         Show daemon and mihomo status
+clashtui-cpp init <shell>   Print shell init function (bash/zsh)
+clashtui-cpp version        Show version
+clashtui-cpp help           Show help
+```
+
 ### Keyboard Shortcuts
 
 | Key | Action |
 |-----|--------|
-| `F1` `F2` `F3` | Switch mode: Global / Rule / Direct |
+| `Alt+1` `Alt+2` `Alt+3` | Switch mode: Global / Rule / Direct |
 | `S` | Subscription / Profile panel |
 | `I` | Install wizard |
 | `L` | Log viewer |
@@ -90,14 +132,22 @@ api:
   host: "127.0.0.1"
   port: 9090
   secret: ""
+  timeout_ms: 5000
 
 display:
   language: "zh"  # "en" or "zh"
+  theme: "default"
 
 mihomo:
-  config_path: "~/.config/mihomo/config.yaml"
+  config_path: "~/.config/clashtui-cpp/mihomo/config.yaml"
   binary_path: "/usr/local/bin/mihomo"
   service_name: "mihomo"
+
+proxy:
+  enabled: false  # remembered on/off state for shell init
+
+profiles:
+  active: ""  # name of the currently active profile
 ```
 
 ## Architecture
@@ -114,11 +164,18 @@ mihomo:
   │ mihomo  │         │ mihomo  │
   │  API    │         │  API    │
   └─────────┘         └─────────┘
+
+Shell integration:
+  eval "$(clashtui-cpp init bash)"
+  clashtui-cpp proxy on  →  stdout: export http_proxy=...
+                         →  eval sets env vars in current shell
+  clashtui-cpp proxy off →  stdout: unset http_proxy ...
 ```
 
 - **TUI mode**: Direct REST API to mihomo for proxy/log/config operations
 - **Daemon mode** (`--daemon`): Manages mihomo process lifecycle, handles profile switching, auto-updates subscriptions via Unix socket IPC
 - **Degraded mode**: TUI works without daemon, using local ProfileManager
+- **CLI mode**: `proxy on/off/env/status` for headless shell environments
 
 ## Build from Source
 
