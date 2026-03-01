@@ -1,5 +1,8 @@
 #include "core/cli.hpp"
 #include "core/config.hpp"
+#include "core/updater.hpp"
+#include "core/installer.hpp"
+#include "core/profile_manager.hpp"
 #include "api/mihomo_client.hpp"
 #include "daemon/ipc_client.hpp"
 #include "daemon/daemon.hpp"
@@ -41,6 +44,12 @@ int CLI::run(int argc, char* argv[]) {
     if (std::strcmp(cmd, "proxy") == 0) {
         return cmd_proxy(argc, argv);
     }
+    if (std::strcmp(cmd, "update") == 0) {
+        return cmd_update(argc, argv);
+    }
+    if (std::strcmp(cmd, "profile") == 0) {
+        return cmd_profile(argc, argv);
+    }
 
     std::cerr << "Unknown command: " << cmd << "\n";
     std::cerr << "Run 'clashtui-cpp help' for usage.\n";
@@ -61,6 +70,12 @@ int CLI::cmd_help() {
         "  clashtui-cpp proxy env      Print export commands (no state change)\n"
         "  clashtui-cpp proxy status   Show proxy ports and env var status\n"
         "  clashtui-cpp status         Show daemon and mihomo status\n"
+        "  clashtui-cpp update [check|self|mihomo|all]  Update self/mihomo\n"
+        "  clashtui-cpp profile list     List subscription profiles\n"
+        "  clashtui-cpp profile add <name> <url>  Add a profile\n"
+        "  clashtui-cpp profile rm <name>         Remove a profile\n"
+        "  clashtui-cpp profile update [name]     Update profile(s)\n"
+        "  clashtui-cpp profile switch <name>     Switch active profile\n"
         "  clashtui-cpp init <shell>   Print shell init function (bash/zsh)\n"
         "  clashtui-cpp version        Show version\n"
         "  clashtui-cpp help           Show this help\n"
@@ -405,4 +420,291 @@ void CLI::print_unset_lines() {
     std::cout << "unset HTTPS_PROXY\n";
     std::cout << "unset ALL_PROXY\n";
     std::cout << "unset NO_PROXY\n";
+}
+
+// ── update ─────────────────────────────────────────────────
+
+int CLI::cmd_update(int argc, char* argv[]) {
+    // Determine subcommand: check, self, mihomo, all (default)
+    std::string sub = "all";
+    if (argc >= 3) {
+        sub = argv[2];
+    }
+
+    if (sub == "check") {
+        // Check self
+        Updater updater;
+        auto info = updater.check_for_update();
+        std::cout << "clashtui-cpp: " << info.current_version;
+        if (info.available) {
+            std::cout << " -> " << info.latest_version << " (update available)\n";
+        } else {
+            std::cout << " (up to date)\n";
+        }
+
+        // Check mihomo
+        Config config;
+        config.load();
+        std::string binary_path = Config::expand_home(config.data().mihomo_binary_path);
+        std::string local_ver = Installer::get_running_version(binary_path);
+        if (local_ver.empty()) local_ver = "(not installed)";
+        try {
+            auto release = Installer::fetch_latest_release();
+            bool newer = !local_ver.empty() && local_ver != "(not installed)" &&
+                         Installer::is_newer_version(local_ver, release.version);
+            std::cout << "mihomo: " << local_ver;
+            if (newer) std::cout << " -> " << release.version << " (update available)";
+            else std::cout << " (up to date)";
+            std::cout << "\n";
+        } catch (...) {
+            std::cout << "mihomo: " << local_ver << " (could not check for updates)\n";
+        }
+        return 0;
+
+    } else if (sub == "self") {
+        std::cout << "Updating clashtui-cpp...\n";
+        Updater updater;
+        auto result = updater.apply_self_update();
+        std::cout << result.message << "\n";
+        return result.success ? 0 : 1;
+
+    } else if (sub == "mihomo") {
+        std::cout << "Updating mihomo...\n";
+        Updater updater;
+        auto result = updater.update_mihomo();
+        std::cout << result.message << "\n";
+        return result.success ? 0 : 1;
+
+    } else if (sub == "all") {
+        int ret = 0;
+
+        // Self first
+        std::cout << "Updating clashtui-cpp...\n";
+        Updater updater;
+        auto r1 = updater.apply_self_update();
+        std::cout << r1.message << "\n";
+        if (!r1.success) ret = 1;
+
+        // Then mihomo
+        std::cout << "\nUpdating mihomo...\n";
+        auto r2 = updater.update_mihomo();
+        std::cout << r2.message << "\n";
+        if (!r2.success && ret == 0) ret = 1;
+
+        return ret;
+
+    } else {
+        std::cerr << "Unknown update command: " << sub << "\n";
+        std::cerr << "Usage: clashtui-cpp update [check|self|mihomo|all]\n";
+        return 1;
+    }
+}
+
+// ── profile ────────────────────────────────────────────────
+
+int CLI::cmd_profile(int argc, char* argv[]) {
+    if (argc < 3) {
+        std::cerr << "Usage: clashtui-cpp profile <list|add|rm|update|switch>\n";
+        return 1;
+    }
+
+    const char* sub = argv[2];
+
+    // ── profile list ────────────────────────────────────────
+    if (std::strcmp(sub, "list") == 0) {
+        DaemonClient dc;
+        Config config;
+        config.load();
+        ProfileManager pm(config);
+
+        std::vector<ProfileInfo> profiles;
+        if (dc.is_daemon_running()) {
+            profiles = dc.list_profiles();
+        } else {
+            profiles = pm.list_profiles();
+        }
+
+        if (profiles.empty()) {
+            std::cout << "No profiles configured.\n";
+            return 0;
+        }
+
+        // Header
+        std::cout << "  NAME" << std::string(14, ' ')
+                  << "URL" << std::string(37, ' ')
+                  << "UPDATED" << std::string(15, ' ')
+                  << "AUTO\n";
+
+        for (const auto& p : profiles) {
+            std::string prefix = p.is_active ? "* " : "  ";
+
+            std::string url = p.source_url;
+            if (url.size() > 38) url = url.substr(0, 35) + "...";
+
+            std::string interval = p.auto_update ? std::to_string(p.update_interval_hours) + "h" : "OFF";
+
+            printf("%s%-18s %-38s %-20s %s\n",
+                   prefix.c_str(),
+                   p.name.c_str(),
+                   url.c_str(),
+                   p.last_updated.c_str(),
+                   interval.c_str());
+        }
+        return 0;
+
+    // ── profile add ─────────────────────────────────────────
+    } else if (std::strcmp(sub, "add") == 0) {
+        if (argc < 5) {
+            std::cerr << "Usage: clashtui-cpp profile add <name> <url>\n";
+            return 1;
+        }
+        std::string name = argv[3];
+        std::string url = argv[4];
+
+        DaemonClient dc;
+        std::string err;
+        bool ok = false;
+
+        if (dc.is_daemon_running()) {
+            ok = dc.add_profile(name, url, err);
+        } else {
+            Config config;
+            config.load();
+            ProfileManager pm(config);
+            auto result = pm.add_profile(name, url);
+            ok = result.success;
+            err = result.error;
+        }
+
+        if (ok) {
+            std::cout << "Profile '" << name << "' added successfully.\n";
+            return 0;
+        }
+        std::cerr << "Failed to add profile: " << err << "\n";
+        return 1;
+
+    // ── profile rm ──────────────────────────────────────────
+    } else if (std::strcmp(sub, "rm") == 0) {
+        if (argc < 4) {
+            std::cerr << "Usage: clashtui-cpp profile rm <name>\n";
+            return 1;
+        }
+        std::string name = argv[3];
+
+        DaemonClient dc;
+        std::string err;
+        bool ok = false;
+
+        if (dc.is_daemon_running()) {
+            ok = dc.delete_profile(name, err);
+        } else {
+            Config config;
+            config.load();
+            ProfileManager pm(config);
+            ok = pm.delete_profile(name);
+            if (!ok) err = "Profile not found or delete failed";
+        }
+
+        if (ok) {
+            std::cout << "Profile '" << name << "' deleted.\n";
+            return 0;
+        }
+        std::cerr << "Failed to delete profile: " << err << "\n";
+        return 1;
+
+    // ── profile update ──────────────────────────────────────
+    } else if (std::strcmp(sub, "update") == 0) {
+        DaemonClient dc;
+        Config config;
+        config.load();
+        ProfileManager pm(config);
+
+        if (argc >= 4) {
+            // Update specific profile
+            std::string name = argv[3];
+            std::string err;
+            bool ok = false;
+            if (dc.is_daemon_running()) {
+                ok = dc.update_profile(name, err);
+            } else {
+                auto result = pm.update_profile(name);
+                ok = result.success;
+                err = result.error;
+            }
+            if (ok) {
+                std::cout << "Profile '" << name << "' updated.\n";
+                return 0;
+            }
+            std::cerr << "Failed to update profile: " << err << "\n";
+            return 1;
+        } else {
+            // Update all
+            auto profiles = dc.is_daemon_running() ? dc.list_profiles() : pm.list_profiles();
+            bool all_ok = true;
+            for (const auto& p : profiles) {
+                std::string err;
+                bool ok = false;
+                if (dc.is_daemon_running()) {
+                    ok = dc.update_profile(p.name, err);
+                } else {
+                    auto result = pm.update_profile(p.name);
+                    ok = result.success;
+                    err = result.error;
+                }
+                if (ok) {
+                    std::cout << "Updated: " << p.name << "\n";
+                } else {
+                    std::cerr << "Failed: " << p.name << " (" << err << ")\n";
+                    all_ok = false;
+                }
+            }
+            return all_ok ? 0 : 1;
+        }
+
+    // ── profile switch ──────────────────────────────────────
+    } else if (std::strcmp(sub, "switch") == 0) {
+        if (argc < 4) {
+            std::cerr << "Usage: clashtui-cpp profile switch <name>\n";
+            return 1;
+        }
+        std::string name = argv[3];
+
+        DaemonClient dc;
+        std::string err;
+        bool ok = false;
+
+        if (dc.is_daemon_running()) {
+            ok = dc.switch_profile(name, err);
+        } else {
+            Config config;
+            config.load();
+            ProfileManager pm(config);
+            if (pm.switch_active(name)) {
+                std::string deployed = pm.deploy_active_to_mihomo();
+                if (!deployed.empty()) {
+                    // Reload mihomo
+                    auto& d = config.data();
+                    MihomoClient client(d.api_host, d.api_port, d.api_secret);
+                    client.reload_config_and_wait(deployed);
+                    ok = true;
+                } else {
+                    err = "Failed to deploy profile";
+                }
+            } else {
+                err = "Profile not found";
+            }
+        }
+
+        if (ok) {
+            std::cout << "Switched to profile '" << name << "'.\n";
+            return 0;
+        }
+        std::cerr << "Failed to switch profile: " << err << "\n";
+        return 1;
+
+    } else {
+        std::cerr << "Unknown profile command: " << sub << "\n";
+        std::cerr << "Usage: clashtui-cpp profile <list|add|rm|update|switch>\n";
+        return 1;
+    }
 }

@@ -25,6 +25,8 @@ private:
     static int cmd_status();
     static int cmd_init(int argc, char* argv[]);
     static int cmd_proxy(int argc, char* argv[]);
+    static int cmd_update(int argc, char* argv[]);
+    static int cmd_profile(int argc, char* argv[]);
 
     static int proxy_on();
     static int proxy_off();

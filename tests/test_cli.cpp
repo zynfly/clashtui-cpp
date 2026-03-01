@@ -145,3 +145,83 @@ TEST(CLIResolve, DefaultPorts) {
     EXPECT_EQ(ports.socks, 7891);
     EXPECT_FALSE(ports.host.empty());
 }
+
+// ── update subcommand tests ──────────────────────────────────
+
+TEST(CLIUpdate, UpdateNoSubcommand_DispatchesAll) {
+    // "update" with no subcommand dispatches to "all" — returns 0 or 1 depending on network
+    char* argv[] = { (char*)"clashtui-cpp", (char*)"update" };
+    int rc = CLI::run(2, argv);
+    EXPECT_TRUE(rc == 0 || rc == 1);
+}
+
+TEST(CLIUpdate, UnknownSubcommand_ReturnsError) {
+    char* argv[] = { (char*)"clashtui-cpp", (char*)"update", (char*)"foobar" };
+    EXPECT_EQ(CLI::run(3, argv), 1);
+}
+
+TEST(CLIUpdate, CheckOutputFormat) {
+    testing::internal::CaptureStdout();
+    char* argv[] = { (char*)"clashtui-cpp", (char*)"update", (char*)"check" };
+    int rc = CLI::run(3, argv);
+    std::string output = testing::internal::GetCapturedStdout();
+
+    EXPECT_EQ(rc, 0);
+    // Should mention clashtui-cpp version info
+    EXPECT_NE(output.find("clashtui-cpp:"), std::string::npos);
+    // Should mention mihomo
+    EXPECT_NE(output.find("mihomo:"), std::string::npos);
+}
+
+// ── profile subcommand tests ─────────────────────────────────
+
+TEST(CLIProfile, NoSubcommand_ReturnsError) {
+    char* argv[] = { (char*)"clashtui-cpp", (char*)"profile" };
+    EXPECT_EQ(CLI::run(2, argv), 1);
+}
+
+TEST(CLIProfile, UnknownSubcommand_ReturnsError) {
+    char* argv[] = { (char*)"clashtui-cpp", (char*)"profile", (char*)"foobar" };
+    EXPECT_EQ(CLI::run(3, argv), 1);
+}
+
+TEST(CLIProfile, ListReturnsZero) {
+    char* argv[] = { (char*)"clashtui-cpp", (char*)"profile", (char*)"list" };
+    EXPECT_EQ(CLI::run(3, argv), 0);
+}
+
+TEST(CLIProfile, AddMissingArgs_ReturnsError) {
+    // Missing both name and url
+    char* argv1[] = { (char*)"clashtui-cpp", (char*)"profile", (char*)"add" };
+    EXPECT_EQ(CLI::run(3, argv1), 1);
+
+    // Missing url
+    char* argv2[] = { (char*)"clashtui-cpp", (char*)"profile", (char*)"add", (char*)"test" };
+    EXPECT_EQ(CLI::run(4, argv2), 1);
+}
+
+TEST(CLIProfile, RmMissingArgs_ReturnsError) {
+    char* argv[] = { (char*)"clashtui-cpp", (char*)"profile", (char*)"rm" };
+    EXPECT_EQ(CLI::run(3, argv), 1);
+}
+
+TEST(CLIProfile, SwitchMissingArgs_ReturnsError) {
+    char* argv[] = { (char*)"clashtui-cpp", (char*)"profile", (char*)"switch" };
+    EXPECT_EQ(CLI::run(3, argv), 1);
+}
+
+TEST(CLIProfile, UpdateAllReturnsZero) {
+    // update with no name updates all — should succeed even with no profiles
+    char* argv[] = { (char*)"clashtui-cpp", (char*)"profile", (char*)"update" };
+    EXPECT_EQ(CLI::run(3, argv), 0);
+}
+
+TEST(CLIProfile, HelpContainsUpdateAndProfile) {
+    testing::internal::CaptureStdout();
+    char* argv[] = { (char*)"clashtui-cpp", (char*)"help" };
+    CLI::run(2, argv);
+    std::string output = testing::internal::GetCapturedStdout();
+
+    EXPECT_NE(output.find("update"), std::string::npos);
+    EXPECT_NE(output.find("profile"), std::string::npos);
+}

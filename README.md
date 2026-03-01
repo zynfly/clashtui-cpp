@@ -22,6 +22,8 @@ Terminal UI for managing [Clash/Mihomo](https://github.com/MetaCubeX/mihomo) pro
 - **Install Wizard** — Download mihomo binary, SHA256 verify, systemd setup
 - **Daemon Mode** — `--daemon` manages mihomo process lifecycle via IPC
 - **CLI Proxy Control** — `proxy on/off` sets shell environment variables, persists across sessions
+- **CLI Update** — `update self/mihomo/all` to update clashtui-cpp and mihomo from CLI
+- **CLI Profile Management** — `profile list/add/rm/update/switch` for subscription management
 - **Bilingual** — English / 中文, runtime switchable (Ctrl+L)
 - **Auto-Update Check** — Status bar notification when new version available
 
@@ -87,6 +89,15 @@ clashtui-cpp proxy off      Disable proxy (unsets env vars + remembers)
 clashtui-cpp proxy env      Print export commands (no state change)
 clashtui-cpp proxy status   Show proxy ports and env var status
 clashtui-cpp status         Show daemon and mihomo status
+clashtui-cpp update         Update clashtui-cpp and mihomo (default: all)
+clashtui-cpp update check   Check for updates without applying
+clashtui-cpp update self    Update clashtui-cpp binary only
+clashtui-cpp update mihomo  Update mihomo binary only
+clashtui-cpp profile list   List subscription profiles
+clashtui-cpp profile add <name> <url>  Add a profile
+clashtui-cpp profile rm <name>         Remove a profile
+clashtui-cpp profile update [name]     Update one or all profiles
+clashtui-cpp profile switch <name>     Switch active profile
 clashtui-cpp init <shell>   Print shell init function (bash/zsh)
 clashtui-cpp version        Show version
 clashtui-cpp help           Show help
@@ -175,7 +186,7 @@ Shell integration:
 - **TUI mode**: Direct REST API to mihomo for proxy/log/config operations
 - **Daemon mode** (`--daemon`): Manages mihomo process lifecycle, handles profile switching, auto-updates subscriptions via Unix socket IPC
 - **Degraded mode**: TUI works without daemon, using local ProfileManager
-- **CLI mode**: `proxy on/off/env/status` for headless shell environments
+- **CLI mode**: `proxy on/off/env/status` for headless shell environments; `update` for self/mihomo updates; `profile` for subscription CRUD
 
 ## Build from Source
 
