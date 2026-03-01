@@ -43,7 +43,6 @@ inline constexpr Strings EN_STRINGS_DEF = {
     "Select install path",
 
     // Install wizard (extended)
-    "Mihomo is installed",
     "Checking installation...",
     "Fetching latest release...",
     "Ready to install",

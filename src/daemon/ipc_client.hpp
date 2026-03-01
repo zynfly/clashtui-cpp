@@ -30,6 +30,7 @@ public:
     std::string get_active_profile();
 
     struct DaemonStatus {
+        std::string version;
         bool mihomo_running = false;
         int mihomo_pid = -1;
         std::string active_profile;

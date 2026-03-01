@@ -1,4 +1,5 @@
 #include "ui/main_screen.hpp"
+#include "core/updater.hpp"
 #include "i18n/i18n.hpp"
 
 #include <ftxui/dom/elements.hpp>
@@ -37,7 +38,7 @@ struct MainScreen::Impl {
             };
 
             auto header = hbox({
-                text(" clashtui-cpp ") | bold | color(Color::Cyan),
+                text(" clashtui-cpp v" + Updater::current_version() + " ") | bold | color(Color::Cyan),
                 separator(),
                 mode_btn("global", T().mode_global),
                 text(" "),

@@ -168,6 +168,7 @@ DaemonClient::DaemonStatus DaemonClient::get_status() {
 
     try {
         auto& data = resp["data"];
+        status.version = data.value("version", "");
         status.mihomo_running = data.value("mihomo_running", false);
         status.mihomo_pid = data.value("mihomo_pid", -1);
         status.active_profile = data.value("active_profile", "");

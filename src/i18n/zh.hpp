@@ -43,7 +43,6 @@ inline constexpr Strings ZH_STRINGS_DEF = {
     "选择安装路径",
 
     // Install wizard (extended)
-    "Mihomo 已安装",
     "检查安装状态...",
     "获取最新版本信息...",
     "准备安装",

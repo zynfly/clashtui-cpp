@@ -1,5 +1,9 @@
 #include "daemon/daemon.hpp"
 
+#ifndef APP_VERSION
+#define APP_VERSION "0.0.0"
+#endif
+
 #include <nlohmann/json.hpp>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -125,6 +129,7 @@ std::string Daemon::handle_command(const std::string& json_line) {
 
         if (cmd == "status") {
             json data;
+            data["version"] = APP_VERSION;
             data["mihomo_running"] = process_mgr_.is_running();
             data["mihomo_pid"] = process_mgr_.child_pid();
             data["active_profile"] = profile_mgr_.active_profile_name();

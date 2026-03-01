@@ -45,7 +45,6 @@ struct Strings {
     const char* install_select_path;
 
     // Install wizard (extended)
-    const char* install_installed;
     const char* install_checking;
     const char* install_fetching_release;
     const char* install_ready;

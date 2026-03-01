@@ -2,6 +2,7 @@
 #include "core/config.hpp"
 #include "core/installer.hpp"
 #include "core/updater.hpp"
+#include "daemon/ipc_client.hpp"
 #include "i18n/i18n.hpp"
 
 #include <ftxui/dom/elements.hpp>
@@ -61,8 +62,12 @@ struct InstallWizard::Impl {
     bool remove_self_config = false;    // for clashtui-cpp self-uninstall
     bool initial_check_done = false;   // Whether do_check() has been run
     bool service_status_cached = false;
-    bool cached_service_active = false;
-    bool cached_service_installed = false;  // whether unit file exists
+    bool cached_service_active = false;       // mihomo service (legacy)
+    bool cached_service_installed = false;    // mihomo service unit file exists (legacy)
+    bool cached_daemon_active = false;        // clashtui-cpp daemon service
+    bool cached_daemon_installed = false;     // daemon service unit file exists
+    bool cached_mihomo_running = false;       // mihomo process running
+    std::string cached_daemon_version;        // daemon version via IPC
 
     // Protected by mutex (written by worker thread, read by renderer)
     std::mutex mtx;
@@ -435,9 +440,8 @@ struct InstallWizard::Impl {
     // ── Service operations (synchronous, quick) ─────────────────
 
     void do_service_start() {
-        auto name = get_service_name();
-        auto scope = get_scope();
-        if (Installer::start_service(name, scope)) {
+        auto info = Updater::detect_daemon_service();
+        if (info.service_exists && Installer::start_service(info.service_name, info.scope)) {
             set_status(T().service_started);
         } else {
             set_status(T().sub_failed);
@@ -447,9 +451,8 @@ struct InstallWizard::Impl {
     }
 
     void do_service_stop() {
-        auto name = get_service_name();
-        auto scope = get_scope();
-        if (Installer::stop_service(name, scope)) {
+        auto info = Updater::detect_daemon_service();
+        if (info.service_exists && Installer::stop_service(info.service_name, info.scope)) {
             set_status(T().service_stopped);
         } else {
             set_status(T().sub_failed);
@@ -459,19 +462,26 @@ struct InstallWizard::Impl {
     }
 
     void do_service_install() {
-        std::string binary_path;
-        if (callbacks.get_binary_path) binary_path = callbacks.get_binary_path();
-        if (binary_path.empty()) binary_path = "/usr/local/bin/mihomo";
-
-        std::string config_dir = Config::mihomo_dir();
-        if (callbacks.get_config_path) {
-            auto cfg = Config::expand_home(callbacks.get_config_path());
-            if (!cfg.empty()) config_dir = fs::path(cfg).parent_path().string();
+        // Migrate: remove legacy mihomo service if it exists
+        if (cached_service_installed) {
+            auto legacy_name = get_service_name();
+            auto legacy_scope = get_scope();
+            if (cached_service_active) {
+                Installer::stop_service(legacy_name, legacy_scope);
+            }
+            Installer::remove_service(legacy_name, legacy_scope);
         }
 
-        auto name = get_service_name();
+        // Install daemon service
+        std::string clashtui_path = "/usr/local/bin/clashtui-cpp";
+        try {
+            auto self = fs::read_symlink("/proc/self/exe").string();
+            if (!self.empty()) clashtui_path = self;
+        } catch (...) {}
+
         auto scope = get_scope();
-        if (Installer::install_service(binary_path, config_dir, name, scope)) {
+        std::string svc_name = "clashtui-cpp";
+        if (Installer::install_daemon_service(clashtui_path, svc_name, scope)) {
             set_status(T().service_created);
         } else {
             set_status(T().sub_failed);
@@ -481,13 +491,11 @@ struct InstallWizard::Impl {
     }
 
     void do_service_remove() {
-        auto name = get_service_name();
-        auto scope = get_scope();
-        // Dependency: stop service before removing
-        if (cached_service_active) {
-            Installer::stop_service(name, scope);
+        auto info = Updater::detect_daemon_service();
+        if (info.service_active) {
+            Installer::stop_service(info.service_name, info.scope);
         }
-        if (Installer::remove_service(name, scope)) {
+        if (info.service_exists && Installer::remove_service(info.service_name, info.scope)) {
             set_status(T().service_removed);
         } else {
             set_status(T().sub_failed);
@@ -696,18 +704,34 @@ struct InstallWizard::Impl {
     }
 
     void refresh_service_status() {
+        // Legacy mihomo service status (for migration check)
         auto service_name = get_service_name();
         auto scope = get_scope();
         cached_service_active = Installer::is_service_active(service_name, scope);
-        // Check if service unit file exists on disk
         auto svc_path = Installer::get_service_file_path(service_name, scope);
         cached_service_installed = fs::exists(svc_path);
+
+        // clashtui-cpp daemon service status
+        auto daemon_info = Updater::detect_daemon_service();
+        cached_daemon_active = daemon_info.service_active;
+        cached_daemon_installed = daemon_info.service_exists;
+
+        // Daemon IPC: get mihomo running status and daemon version
+        if (cached_daemon_active) {
+            DaemonClient ipc;
+            auto ds = ipc.get_status();
+            cached_mihomo_running = ds.mihomo_running;
+            cached_daemon_version = ds.version;
+        } else {
+            cached_mihomo_running = (system("pgrep -x mihomo >/dev/null 2>&1") == 0);
+            cached_daemon_version.clear();
+        }
+
         service_status_cached = true;
     }
 
     Element render_installed() {
         std::string ver;
-        std::string status_copy;
         std::string self_ver;
         std::string self_latest;
         std::string mihomo_latest;
@@ -716,7 +740,6 @@ struct InstallWizard::Impl {
         {
             std::lock_guard<std::mutex> lock(mtx);
             ver = current_version;
-            status_copy = status_msg;
             self_ver = self_version;
             self_latest = self_latest_version;
             mihomo_latest = latest_version;
@@ -724,79 +747,82 @@ struct InstallWizard::Impl {
             self_avail = self_update_available;
         }
 
-        bool active = cached_service_active;
-        bool svc_installed = cached_service_installed;
+        bool daemon_active = cached_daemon_active;
+        bool daemon_installed = cached_daemon_installed;
+        std::string daemon_ver = cached_daemon_version;
         bool has_sd = Installer::has_systemd();
 
         Elements content;
 
-        // Header: installed status + service badge
+        // clashtui-cpp daemon: version [daemon] + update badge + running badge
         {
-            auto svc_badge = active
-                ? text(" [" + std::string(T().service_active) + "] ") | color(Color::Green)
-                : svc_installed
-                    ? text(" [" + std::string(T().service_inactive) + "] ") | color(Color::Yellow)
-                    : text(" [" + std::string(T().service_not_installed) + "] ") | color(Color::GrayDark);
-            content.push_back(hbox({
-                text(" " + std::string(T().install_installed)) | color(Color::Green),
-                filler(),
-                has_sd ? svc_badge : text(""),
-            }));
-        }
-
-        // clashtui-cpp version
-        if (!self_ver.empty()) {
-            Elements self_left;
-            self_left.push_back(text(" " + std::string(T().install_self_version) + ": ") | dim);
-            self_left.push_back(text("v" + self_ver));
-            if (self_checked && self_avail && !self_latest.empty()) {
-                self_left.push_back(text(" -> v" + self_latest) | color(Color::Yellow));
+            // Use daemon version via IPC if available, otherwise self version
+            std::string display_ver = !daemon_ver.empty() ? daemon_ver : self_ver;
+            Elements left;
+            left.push_back(text(" clashtui-cpp ") | size(WIDTH, EQUAL, 15));
+            if (!display_ver.empty()) {
+                left.push_back(text("v" + display_ver));
             }
-            auto self_badge = self_checked
+            left.push_back(text(" [daemon]") | dim);
+            if (self_checked && self_avail && !self_latest.empty()) {
+                left.push_back(text(" -> v" + self_latest) | color(Color::Yellow));
+            }
+
+            auto update_badge = self_checked
                 ? (self_avail && !self_latest.empty()
-                    ? text(" [" + std::string(T().install_upgrade_available) + "] ") | color(Color::Yellow)
-                    : text(" [" + std::string(T().install_up_to_date) + "] ") | color(Color::Green))
+                    ? text(" [" + std::string(T().install_upgrade_available) + "]") | color(Color::Yellow)
+                    : text(" [" + std::string(T().install_up_to_date) + "]") | color(Color::Green))
                 : text("");
-            content.push_back(hbox({hbox(std::move(self_left)), filler(), self_badge}));
+
+            auto status_badge = text("");
+            if (has_sd) {
+                if (daemon_installed) {
+                    status_badge = daemon_active
+                        ? text(" [" + std::string(T().service_active) + "]") | color(Color::Green)
+                        : text(" [" + std::string(T().service_inactive) + "]") | color(Color::Yellow);
+                } else {
+                    status_badge = text(" [" + std::string(T().service_not_installed) + "]") | color(Color::GrayDark);
+                }
+            }
+            auto right = hbox({update_badge, status_badge | size(WIDTH, EQUAL, 12)});
+            content.push_back(hbox({hbox(std::move(left)), filler(), right}));
         }
 
-        // mihomo version
+        // mihomo: version + update badge + running badge
         if (!ver.empty()) {
             bool mihomo_newer = self_checked && !mihomo_latest.empty()
                                 && Installer::is_newer_version(ver, mihomo_latest);
-            Elements mihomo_left;
-            mihomo_left.push_back(text(" mihomo: ") | dim);
-            mihomo_left.push_back(text(ver));
+            Elements left;
+            left.push_back(text(" mihomo ") | dim | size(WIDTH, EQUAL, 15));
+            left.push_back(text(ver));
             if (mihomo_newer) {
-                mihomo_left.push_back(text(" -> " + mihomo_latest) | color(Color::Yellow));
+                left.push_back(text(" -> " + mihomo_latest) | color(Color::Yellow));
             }
-            auto mihomo_badge = self_checked
+
+            auto running_badge = cached_mihomo_running
+                ? text(" [" + std::string(T().service_active) + "]") | color(Color::Green)
+                : text(" [" + std::string(T().service_inactive) + "]") | color(Color::Yellow);
+
+            auto update_badge = self_checked
                 ? (mihomo_newer
-                    ? text(" [" + std::string(T().install_upgrade_available) + "] ") | color(Color::Yellow)
-                    : text(" [" + std::string(T().install_up_to_date) + "] ") | color(Color::Green))
+                    ? text(" [" + std::string(T().install_upgrade_available) + "]") | color(Color::Yellow)
+                    : text(" [" + std::string(T().install_up_to_date) + "]") | color(Color::Green))
                 : text("");
-            content.push_back(hbox({hbox(std::move(mihomo_left)), filler(), mihomo_badge}));
+            auto right = hbox({update_badge, running_badge | size(WIDTH, EQUAL, 12)});
+            content.push_back(hbox({hbox(std::move(left)), filler(), right}));
         }
 
-        // Show status message (e.g. "up to date", "service started")
-        if (!status_copy.empty()) {
-            content.push_back(text(" " + status_copy) | color(Color::Green));
-        }
-
-        // Service management section
+        // Service management section (daemon service)
         if (has_sd) {
             content.push_back(separator());
-            if (svc_installed) {
-                // Service is installed: show start/stop toggle
-                if (active) {
+            if (daemon_installed) {
+                if (daemon_active) {
                     content.push_back(text(" [1] " + std::string(T().service_stop)) | dim);
                 } else {
                     content.push_back(text(" [1] " + std::string(T().service_start)) | dim);
                 }
-                // Service is installed: offer removal
                 content.push_back(text(" [2] " + std::string(T().service_remove)) | dim);
             } else {
-                // Service not installed: offer install
                 content.push_back(text(" [2] " + std::string(T().service_install)) | dim);
             }
         }
@@ -1345,10 +1371,10 @@ Component InstallWizard::component() {
                 }
             }
 
-            // 1: Service start/stop toggle (from Installed state)
+            // 1: Daemon service start/stop toggle (from Installed state)
             if (ch == "1" && mode == WizardMode::Installed) {
-                if (Installer::has_systemd() && self->cached_service_installed) {
-                    if (self->cached_service_active) {
+                if (Installer::has_systemd() && self->cached_daemon_installed) {
+                    if (self->cached_daemon_active) {
                         self->do_service_stop();
                     } else {
                         self->do_service_start();
@@ -1357,10 +1383,10 @@ Component InstallWizard::component() {
                 }
             }
 
-            // 2: Service install/remove toggle (from Installed state)
+            // 2: Daemon service install/remove toggle (from Installed state)
             if (ch == "2" && mode == WizardMode::Installed) {
                 if (Installer::has_systemd()) {
-                    if (self->cached_service_installed) {
+                    if (self->cached_daemon_installed) {
                         self->do_service_remove();
                     } else {
                         self->do_service_install();
