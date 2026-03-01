@@ -135,6 +135,14 @@ std::string Installer::get_running_version(const std::string& binary_path) {
     while (!result.empty() && (result.back() == '\n' || result.back() == '\r')) {
         result.pop_back();
     }
+
+    // Extract short version (e.g. "v1.19.20") from full output like
+    // "Mihomo Meta v1.19.20 linux arm64 with go1.25.7 Sun Feb  8 13:59:42 UTC 2025"
+    std::regex ver_re(R"(v\d+\.\d+\.\d+)");
+    std::smatch match;
+    if (std::regex_search(result, match, ver_re)) {
+        return match[0].str();
+    }
     return result;
 }
 

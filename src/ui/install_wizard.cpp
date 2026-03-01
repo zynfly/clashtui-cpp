@@ -204,7 +204,7 @@ struct InstallWizard::Impl {
                     }
 
                     if (!mihomo_newer && !self_newer) {
-                        set_status(T().install_up_to_date);
+                        set_status("");
                         set_mode(WizardMode::Installed);
                         post_refresh();
                         return;
@@ -746,35 +746,36 @@ struct InstallWizard::Impl {
 
         // clashtui-cpp version
         if (!self_ver.empty()) {
-            Elements self_line;
-            self_line.push_back(text(" " + std::string(T().install_self_version) + ": ") | dim);
-            self_line.push_back(text("v" + self_ver));
-            if (self_checked) {
-                if (self_avail && !self_latest.empty()) {
-                    self_line.push_back(text(" -> v" + self_latest) | color(Color::Yellow));
-                    self_line.push_back(text(" (" + std::string(T().install_self_update_available) + ")") | color(Color::Yellow));
-                } else {
-                    self_line.push_back(text(" (" + std::string(T().install_self_up_to_date) + ")") | color(Color::Green));
-                }
+            Elements self_left;
+            self_left.push_back(text(" " + std::string(T().install_self_version) + ": ") | dim);
+            self_left.push_back(text("v" + self_ver));
+            if (self_checked && self_avail && !self_latest.empty()) {
+                self_left.push_back(text(" -> v" + self_latest) | color(Color::Yellow));
             }
-            content.push_back(hbox(std::move(self_line)));
+            auto self_badge = self_checked
+                ? (self_avail && !self_latest.empty()
+                    ? text(" [" + std::string(T().install_self_update_available) + "] ") | color(Color::Yellow)
+                    : text(" [" + std::string(T().install_self_up_to_date) + "] ") | color(Color::Green))
+                : text("");
+            content.push_back(hbox({hbox(std::move(self_left)), filler(), self_badge}));
         }
 
         // mihomo version
         if (!ver.empty()) {
-            Elements mihomo_line;
-            mihomo_line.push_back(text(" mihomo: ") | dim);
-            mihomo_line.push_back(text(ver));
-            if (self_checked && !mihomo_latest.empty()) {
-                bool mihomo_newer = Installer::is_newer_version(ver, mihomo_latest);
-                if (mihomo_newer) {
-                    mihomo_line.push_back(text(" -> " + mihomo_latest) | color(Color::Yellow));
-                    mihomo_line.push_back(text(" (" + std::string(T().install_self_update_available) + ")") | color(Color::Yellow));
-                } else {
-                    mihomo_line.push_back(text(" (" + std::string(T().install_self_up_to_date) + ")") | color(Color::Green));
-                }
+            bool mihomo_newer = self_checked && !mihomo_latest.empty()
+                                && Installer::is_newer_version(ver, mihomo_latest);
+            Elements mihomo_left;
+            mihomo_left.push_back(text(" mihomo: ") | dim);
+            mihomo_left.push_back(text(ver));
+            if (mihomo_newer) {
+                mihomo_left.push_back(text(" -> " + mihomo_latest) | color(Color::Yellow));
             }
-            content.push_back(hbox(std::move(mihomo_line)));
+            auto mihomo_badge = self_checked
+                ? (mihomo_newer
+                    ? text(" [" + std::string(T().install_self_update_available) + "] ") | color(Color::Yellow)
+                    : text(" [" + std::string(T().install_self_up_to_date) + "] ") | color(Color::Green))
+                : text("");
+            content.push_back(hbox({hbox(std::move(mihomo_left)), filler(), mihomo_badge}));
         }
 
         // Show status message (e.g. "up to date", "service started")
