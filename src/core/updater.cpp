@@ -184,6 +184,45 @@ static std::string updater_shell_quote(const std::string& s) {
 }
 
 // ════════════════════════════════════════════════════════════════
+// atomic_replace_binary — safe binary replacement via rename()
+// ════════════════════════════════════════════════════════════════
+
+std::string Updater::atomic_replace_binary(const std::string& new_binary,
+                                           const std::string& target_path) {
+    fs::path target(target_path);
+    std::string tmp_dest = (target.parent_path() / ".clashtui-cpp.update.tmp").string();
+
+    if (access(target_path.c_str(), W_OK) == 0 &&
+        access(target.parent_path().c_str(), W_OK) == 0) {
+        // We have write permission — atomic rename
+        try {
+            fs::copy_file(new_binary, tmp_dest, fs::copy_options::overwrite_existing);
+            fs::permissions(tmp_dest,
+                            fs::perms::owner_exec | fs::perms::group_exec | fs::perms::others_exec,
+                            fs::perm_options::add);
+            fs::rename(tmp_dest, target_path);
+        } catch (const std::exception& e) {
+            try { fs::remove(tmp_dest); } catch (...) {}
+            return std::string("Failed to replace binary: ") + e.what();
+        }
+    } else {
+        // Need sudo — use cp to temp then mv (atomic) to target
+        std::string cmd = "sudo cp " + updater_shell_quote(new_binary) + " " +
+                          updater_shell_quote(tmp_dest) +
+                          " && sudo chmod +x " + updater_shell_quote(tmp_dest) +
+                          " && sudo mv " + updater_shell_quote(tmp_dest) + " " +
+                          updater_shell_quote(target_path);
+        if (system(cmd.c_str()) != 0) {
+            std::string cleanup = "sudo rm -f " + updater_shell_quote(tmp_dest);
+            system(cleanup.c_str());
+            return "Failed to replace binary (sudo failed)";
+        }
+    }
+
+    return ""; // success
+}
+
+// ════════════════════════════════════════════════════════════════
 // apply_self_update — download and replace the clashtui-cpp binary
 // ════════════════════════════════════════════════════════════════
 
@@ -282,30 +321,12 @@ UpdateResult Updater::apply_self_update() const {
             return result;
         }
 
-        if (access(self_path.c_str(), W_OK) == 0) {
-            // We have write permission — copy directly
-            try {
-                fs::copy_file(new_binary, self_path, fs::copy_options::overwrite_existing);
-                fs::permissions(self_path,
-                                fs::perms::owner_exec | fs::perms::group_exec | fs::perms::others_exec,
-                                fs::perm_options::add);
-            } catch (const std::exception& e) {
-                result.message = std::string("Failed to replace binary: ") + e.what();
-                try { fs::remove(tmp_archive); } catch (...) {}
-                try { fs::remove_all(tmp_extract_dir); } catch (...) {}
-                return result;
-            }
-        } else {
-            // Need sudo to replace
-            std::string cmd = "sudo cp " + updater_shell_quote(new_binary) + " " +
-                              updater_shell_quote(self_path) + " && sudo chmod +x " +
-                              updater_shell_quote(self_path);
-            if (system(cmd.c_str()) != 0) {
-                result.message = "Failed to replace binary (sudo cp failed)";
-                try { fs::remove(tmp_archive); } catch (...) {}
-                try { fs::remove_all(tmp_extract_dir); } catch (...) {}
-                return result;
-            }
+        std::string replace_err = atomic_replace_binary(new_binary, self_path);
+        if (!replace_err.empty()) {
+            result.message = replace_err;
+            try { fs::remove(tmp_archive); } catch (...) {}
+            try { fs::remove_all(tmp_extract_dir); } catch (...) {}
+            return result;
         }
 
         // Step 7: Clean up

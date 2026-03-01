@@ -31,6 +31,14 @@ public:
     /// Download and apply mihomo update (using config for paths)
     UpdateResult update_mihomo() const;
 
+    /// Atomically replace a binary file using rename().
+    /// Writes new_binary to a temp file in the same dir as target_path,
+    /// then renames (atomic inode swap). The old inode remains valid for
+    /// any process that has the file open/mapped.
+    /// Returns empty string on success, or error message on failure.
+    static std::string atomic_replace_binary(const std::string& new_binary,
+                                             const std::string& target_path);
+
 private:
     std::string repo_;
     static std::string detect_arch_tag();
