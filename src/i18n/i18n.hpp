@@ -143,6 +143,17 @@ struct Strings {
     const char* install_self_up_to_date;
     const char* install_self_update_available;
     const char* install_checking_updates;
+
+    // TUI Update actions
+    const char* update_apply_self;
+    const char* update_apply_mihomo;
+    const char* update_apply_both;
+    const char* update_stopping_daemon;
+    const char* update_starting_daemon;
+    const char* update_daemon_restarted;
+    const char* update_restart_daemon_manual;
+    const char* update_restart_tui;
+    const char* update_in_progress;
 };
 
 #include "i18n/en.hpp"

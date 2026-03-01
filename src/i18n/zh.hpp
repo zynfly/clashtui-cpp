@@ -141,4 +141,15 @@ inline constexpr Strings ZH_STRINGS_DEF = {
     "已是最新",
     "有更新可用",
     "检查更新中...",
+
+    // TUI Update actions
+    "更新 clashtui-cpp",
+    "更新 mihomo",
+    "全部更新",
+    "停止守护进程...",
+    "启动守护进程...",
+    "守护进程已重启",
+    "请手动重启守护进程",
+    "请退出并重新启动",
+    "更新中...",
 };

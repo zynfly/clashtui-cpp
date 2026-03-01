@@ -223,7 +223,44 @@ std::string Updater::atomic_replace_binary(const std::string& new_binary,
 }
 
 // ════════════════════════════════════════════════════════════════
+// Daemon service detection & lifecycle
+// ════════════════════════════════════════════════════════════════
+
+DaemonServiceInfo Updater::detect_daemon_service() {
+    DaemonServiceInfo info;
+    info.is_systemd = Installer::has_systemd();
+    info.scope = ServiceScope::System; // default
+    if (!info.is_systemd) return info;
+
+    // Check common service names in both scopes
+    for (const char* name : {"clashtui-cpp", "clashtui-cpp-daemon"}) {
+        for (auto scope : {ServiceScope::System, ServiceScope::User}) {
+            std::string path = Installer::get_service_file_path(name, scope);
+            if (fs::exists(path)) {
+                info.service_exists = true;
+                info.service_name = name;
+                info.scope = scope;
+                info.service_active = Installer::is_service_active(name, scope);
+                return info;
+            }
+        }
+    }
+    return info;
+}
+
+bool Updater::stop_daemon_if_running(const DaemonServiceInfo& info) {
+    if (!info.service_active) return true;
+    return Installer::stop_service(info.service_name, info.scope);
+}
+
+bool Updater::start_daemon(const DaemonServiceInfo& info) {
+    if (!info.service_exists) return false;
+    return Installer::start_service(info.service_name, info.scope);
+}
+
+// ════════════════════════════════════════════════════════════════
 // apply_self_update — download and replace the clashtui-cpp binary
+// Daemon-aware: stops daemon before replace, restarts after.
 // ════════════════════════════════════════════════════════════════
 
 UpdateResult Updater::apply_self_update() const {
@@ -247,7 +284,6 @@ UpdateResult Updater::apply_self_update() const {
         std::string tmp_archive = "/tmp/clashtui-cpp-update.tar.gz";
         std::string tmp_extract_dir = "/tmp/clashtui-cpp-update-extract";
 
-        // Clean up any previous temp files
         try { fs::remove(tmp_archive); } catch (...) {}
         try { fs::remove_all(tmp_extract_dir); } catch (...) {}
 
@@ -257,13 +293,11 @@ UpdateResult Updater::apply_self_update() const {
             return result;
         }
 
-        // Step 3: Try to download and verify SHA256
-        // Construct sha256 URL by appending .sha256 to the download URL
+        // Step 3: SHA256 verification
         std::string sha256_url = info.download_url + ".sha256";
         std::string tmp_sha256 = "/tmp/clashtui-cpp-update.tar.gz.sha256";
 
         if (Installer::download_with_fallback(sha256_url, tmp_sha256, nullptr, nullptr)) {
-            // Read expected hash from the sha256 file
             std::ifstream sha_file(tmp_sha256);
             std::string expected_hash;
             if (sha_file.is_open()) {
@@ -281,11 +315,9 @@ UpdateResult Updater::apply_self_update() const {
             }
             try { fs::remove(tmp_sha256); } catch (...) {}
         }
-        // SHA256 file not available is non-fatal — proceed without verification
 
         // Step 4: Extract .tar.gz
         fs::create_directories(tmp_extract_dir);
-
         std::string tar_cmd = "tar xzf " + updater_shell_quote(tmp_archive) +
                               " -C " + updater_shell_quote(tmp_extract_dir);
         if (system(tar_cmd.c_str()) != 0) {
@@ -296,7 +328,6 @@ UpdateResult Updater::apply_self_update() const {
         }
 
         // Step 5: Find the extracted binary
-        // Look for 'clashtui-cpp' in the extracted directory (may be top-level or in a subdirectory)
         std::string new_binary;
         for (auto& entry : fs::recursive_directory_iterator(tmp_extract_dir)) {
             if (entry.is_regular_file() && entry.path().filename() == "clashtui-cpp") {
@@ -312,7 +343,7 @@ UpdateResult Updater::apply_self_update() const {
             return result;
         }
 
-        // Step 6: Replace the current binary
+        // Step 6: Locate self path
         std::string self_path = get_self_path();
         if (self_path.empty()) {
             result.message = "Could not determine path of current binary";
@@ -321,21 +352,39 @@ UpdateResult Updater::apply_self_update() const {
             return result;
         }
 
+        // Step 7: Stop daemon if running (daemon stop → mihomo also stops)
+        auto daemon_info = detect_daemon_service();
+        bool daemon_was_active = daemon_info.service_active;
+        if (daemon_was_active) {
+            stop_daemon_if_running(daemon_info);
+        }
+
+        // Step 8: Atomic replace binary
         std::string replace_err = atomic_replace_binary(new_binary, self_path);
         if (!replace_err.empty()) {
+            // Try to restart daemon even if replace failed
+            if (daemon_was_active) start_daemon(daemon_info);
             result.message = replace_err;
             try { fs::remove(tmp_archive); } catch (...) {}
             try { fs::remove_all(tmp_extract_dir); } catch (...) {}
             return result;
         }
 
-        // Step 7: Clean up
+        // Step 9: Restart daemon (new binary → new daemon → auto-starts mihomo)
+        if (daemon_was_active) {
+            start_daemon(daemon_info);
+        }
+
+        // Step 10: Clean up
         try { fs::remove(tmp_archive); } catch (...) {}
         try { fs::remove_all(tmp_extract_dir); } catch (...) {}
 
         result.success = true;
-        result.message = "Updated from v" + info.current_version + " to " + info.latest_version +
-                         ". Please restart clashtui-cpp.";
+        result.message = "Updated from v" + info.current_version + " to " + info.latest_version;
+        if (daemon_was_active) {
+            result.message += ". Daemon restarted.";
+        }
+        result.message += " Please restart clashtui-cpp.";
     } catch (const std::exception& e) {
         result.message = std::string("Self-update failed: ") + e.what();
     } catch (...) {
@@ -347,13 +396,14 @@ UpdateResult Updater::apply_self_update() const {
 
 // ════════════════════════════════════════════════════════════════
 // update_mihomo — download and replace the mihomo binary
+// Daemon-aware: stops daemon before replace, restarts after.
 // ════════════════════════════════════════════════════════════════
 
 UpdateResult Updater::update_mihomo() const {
     UpdateResult result;
 
     try {
-        // Step 1: Load config to get binary_path and service_name
+        // Step 1: Load config
         Config cfg;
         cfg.load();
         const auto& data = cfg.data();
@@ -387,74 +437,83 @@ UpdateResult Updater::update_mihomo() const {
             return result;
         }
 
-        // Step 6: Check if mihomo service is running and stop it
-        // Determine service scope based on binary path
-        ServiceScope scope = ServiceScope::System;
+        // Step 6: Detect daemon service and mihomo service
+        auto daemon_info = detect_daemon_service();
+        bool daemon_was_active = daemon_info.service_active;
+
+        ServiceScope mihomo_scope = ServiceScope::System;
         if (binary_path.find("/usr/") != 0 && binary_path.find("/opt/") != 0) {
-            scope = ServiceScope::User;
+            mihomo_scope = ServiceScope::User;
+        }
+        bool mihomo_was_running = Installer::has_systemd() &&
+                                  Installer::is_service_active(service_name, mihomo_scope);
+
+        // Step 7: Stop everything
+        // If daemon is running, stop daemon (which kills mihomo child process)
+        // Otherwise, stop mihomo service directly
+        if (daemon_was_active) {
+            stop_daemon_if_running(daemon_info);
+        } else if (mihomo_was_running) {
+            Installer::stop_service(service_name, mihomo_scope);
         }
 
-        bool was_running = Installer::has_systemd() &&
-                           Installer::is_service_active(service_name, scope);
-
-        if (was_running) {
-            Installer::stop_service(service_name, scope);
-        }
-
-        // Step 7: Download to temp location
+        // Step 8: Download to temp location
         std::string tmp_gz = "/tmp/mihomo-update.gz";
         try { fs::remove(tmp_gz); } catch (...) {}
 
         if (!Installer::download_with_fallback(asset.download_url, tmp_gz, nullptr, nullptr)) {
-            // Restart service if it was running before download failure
-            if (was_running) {
-                Installer::start_service(service_name, scope);
-            }
+            // Restore services on failure
+            if (daemon_was_active) start_daemon(daemon_info);
+            else if (mihomo_was_running) Installer::start_service(service_name, mihomo_scope);
             result.message = "Failed to download mihomo from " + asset.download_url;
             return result;
         }
 
-        // Step 8: Verify SHA256 if checksums are available
+        // Step 9: Verify SHA256 if checksums are available
         if (!release.checksums_url.empty()) {
             std::string expected_hash = Installer::fetch_checksum_for_file(
                 release.checksums_url, asset.name);
             if (!expected_hash.empty()) {
                 if (!Installer::verify_sha256(tmp_gz, expected_hash)) {
                     try { fs::remove(tmp_gz); } catch (...) {}
-                    if (was_running) {
-                        Installer::start_service(service_name, scope);
-                    }
+                    if (daemon_was_active) start_daemon(daemon_info);
+                    else if (mihomo_was_running) Installer::start_service(service_name, mihomo_scope);
                     result.message = "SHA256 checksum verification failed for mihomo";
                     return result;
                 }
             }
         }
 
-        // Step 9: Install binary (extract + copy + chmod, handles sudo)
+        // Step 10: Install binary (extract + copy + chmod, handles sudo)
         bool needs_sudo = (binary_path.find("/usr/") == 0 || binary_path.find("/opt/") == 0);
         if (!Installer::install_binary(tmp_gz, binary_path, needs_sudo)) {
             try { fs::remove(tmp_gz); } catch (...) {}
-            if (was_running) {
-                Installer::start_service(service_name, scope);
-            }
+            if (daemon_was_active) start_daemon(daemon_info);
+            else if (mihomo_was_running) Installer::start_service(service_name, mihomo_scope);
             result.message = "Failed to install mihomo binary to " + binary_path;
             return result;
         }
 
-        // Step 10: Clean up
+        // Step 11: Clean up
         try { fs::remove(tmp_gz); } catch (...) {}
 
-        // Step 11: Restart service if it was running
-        if (was_running) {
-            Installer::start_service(service_name, scope);
+        // Step 12: Restart services
+        // If daemon was running → start daemon (daemon auto-starts mihomo)
+        // Otherwise if mihomo service was running → start mihomo service
+        if (daemon_was_active) {
+            start_daemon(daemon_info);
+        } else if (mihomo_was_running) {
+            Installer::start_service(service_name, mihomo_scope);
         }
 
         result.success = true;
-        std::string version_info = release.version;
         if (!local_version.empty()) {
-            result.message = "Mihomo updated from " + local_version + " to " + version_info;
+            result.message = "Mihomo updated from " + local_version + " to " + release.version;
         } else {
-            result.message = "Mihomo updated to " + version_info;
+            result.message = "Mihomo updated to " + release.version;
+        }
+        if (daemon_was_active) {
+            result.message += ". Daemon restarted.";
         }
     } catch (const std::exception& e) {
         result.message = std::string("Mihomo update failed: ") + e.what();

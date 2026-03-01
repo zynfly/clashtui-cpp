@@ -16,6 +16,7 @@ public:
         std::function<void(const std::string&)> set_binary_path;
         std::function<void()> save_config;
         std::function<void()> post_refresh;
+        std::function<void()> request_exit;  // called after self-update to exit TUI
     };
 
     InstallWizard();

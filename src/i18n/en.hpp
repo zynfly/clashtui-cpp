@@ -141,4 +141,15 @@ inline constexpr Strings EN_STRINGS_DEF = {
     "up to date",
     "update available",
     "Checking for updates...",
+
+    // TUI Update actions
+    "Update clashtui-cpp",
+    "Update mihomo",
+    "Update all",
+    "Stopping daemon...",
+    "Starting daemon...",
+    "Daemon restarted",
+    "Please restart the daemon manually",
+    "Please exit and restart",
+    "Updating...",
 };

@@ -318,6 +318,7 @@ App::App() : impl_(std::make_unique<Impl>()) {
         };
         icb.save_config = [this]() { impl_->config.save(); };
         icb.post_refresh = [this]() { impl_->screen.Post(Event::Custom); };
+        icb.request_exit = [this]() { impl_->screen.Exit(); };
         impl_->install_wizard.set_callbacks(std::move(icb));
     }
 

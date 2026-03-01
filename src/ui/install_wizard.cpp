@@ -45,6 +45,8 @@ enum class WizardMode {
     ConfirmUninstall,    // Confirm uninstall mihomo Y/N
     Uninstalling,        // Uninstall in progress
     ConfirmUninstallSelf,// Confirm uninstall clashtui-cpp Y/N
+    UpdatingSelf,        // Self-update in progress
+    UpdatingMihomo,      // Mihomo update in progress
     Failed               // Error, Enter to retry, Esc to go back
 };
 
@@ -80,6 +82,7 @@ struct InstallWizard::Impl {
     std::string self_latest_version;    // from GitHub
     bool self_update_checked = false;
     bool self_update_available = false;
+    bool self_update_applied = false;   // self binary replaced, TUI should exit
 
     // Background thread
     std::atomic<bool> cancel_flag{false};
@@ -493,6 +496,60 @@ struct InstallWizard::Impl {
         post_refresh();
     }
 
+    // ── Update workers (daemon-aware) ──────────────────────────
+
+    void do_update_self() {
+        join_worker();
+        worker = std::thread([this]() {
+            set_mode(WizardMode::UpdatingSelf);
+            set_status(T().update_in_progress);
+            post_refresh();
+
+            Updater updater;
+            auto result = updater.apply_self_update();
+
+            if (result.success) {
+                {
+                    std::lock_guard<std::mutex> lock(mtx);
+                    self_update_applied = true;
+                    status_msg = result.message;
+                }
+                set_mode(WizardMode::Complete);
+            } else {
+                set_error(result.message);
+            }
+            post_refresh();
+        });
+    }
+
+    void do_update_mihomo() {
+        join_worker();
+        worker = std::thread([this]() {
+            set_mode(WizardMode::UpdatingMihomo);
+            set_status(T().update_in_progress);
+            post_refresh();
+
+            Updater updater;
+            auto result = updater.update_mihomo();
+
+            if (result.success) {
+                {
+                    std::lock_guard<std::mutex> lock(mtx);
+                    status_msg = result.message;
+                }
+                // Re-check version after update
+                if (callbacks.get_version) {
+                    std::lock_guard<std::mutex> lock(mtx);
+                    current_version = callbacks.get_version();
+                }
+                set_mode(WizardMode::Complete);
+            } else {
+                set_error(result.message);
+            }
+            post_refresh();
+        });
+    }
+
     // ── Self-uninstall (clashtui-cpp itself) ─────────────────────
 
     void do_uninstall_self() {
@@ -743,9 +800,23 @@ struct InstallWizard::Impl {
             }
         }
 
-        // Update & uninstall section
+        // Update actions section
         content.push_back(separator());
         content.push_back(text(" [U] " + std::string(T().install_check_update)) | dim);
+
+        // Show update action keys when updates are available
+        if (self_checked) {
+            bool mihomo_avail = !mihomo_latest.empty() && !ver.empty()
+                                && Installer::is_newer_version(ver, mihomo_latest);
+            if (self_avail) {
+                content.push_back(text(" [S] " + std::string(T().update_apply_self)) | color(Color::Yellow));
+            }
+            if (mihomo_avail) {
+                content.push_back(text(" [M] " + std::string(T().update_apply_mihomo)) | color(Color::Yellow));
+            }
+        }
+
+        // Uninstall section
         content.push_back(text(" [X] " + std::string(T().uninstall_title)) | dim);
         content.push_back(text(" [D] " + std::string(T().uninstall_self_title)) | dim);
 
@@ -898,18 +969,30 @@ struct InstallWizard::Impl {
 
     Element render_complete() {
         std::string status_copy;
+        bool self_replaced;
         {
             std::lock_guard<std::mutex> lock(mtx);
             status_copy = status_msg;
+            self_replaced = self_update_applied;
         }
 
-        return vbox({
-            text(" " + std::string(T().install_complete)) | color(Color::Green) | bold,
-            separator(),
-            text(" " + status_copy) | dim,
-            separator(),
-            text(" Enter = OK, Esc = back") | dim,
-        });
+        Elements content;
+        content.push_back(text(" " + std::string(T().install_complete)) | color(Color::Green) | bold);
+        content.push_back(separator());
+        if (!status_copy.empty()) {
+            content.push_back(text(" " + status_copy) | dim);
+        }
+
+        if (self_replaced) {
+            content.push_back(text(" " + std::string(T().update_restart_tui)) | color(Color::Yellow));
+            content.push_back(separator());
+            content.push_back(text(" Enter = " + std::string(T().confirm) + " (" + std::string(T().update_restart_tui) + ")") | dim);
+        } else {
+            content.push_back(separator());
+            content.push_back(text(" Enter = OK, Esc = back") | dim);
+        }
+
+        return vbox(std::move(content));
     }
 
     Element render_confirm_uninstall() {
@@ -961,6 +1044,25 @@ struct InstallWizard::Impl {
             text(" [Y] " + std::string(T().confirm) +
                  "  [N] " + std::string(T().cancel)) | dim,
             text(" Up/Down = toggle option") | dim,
+        });
+    }
+
+    Element render_updating() {
+        std::string status_copy;
+        {
+            std::lock_guard<std::mutex> lock(mtx);
+            status_copy = status_msg;
+        }
+
+        bool is_self = (mode == WizardMode::UpdatingSelf);
+        std::string title = is_self
+            ? std::string(T().update_apply_self)
+            : std::string(T().update_apply_mihomo);
+
+        return vbox({
+            text(" " + title) | color(Color::Yellow) | bold,
+            separator(),
+            text(" " + status_copy) | dim,
         });
     }
 
@@ -1046,6 +1148,10 @@ Component InstallWizard::component() {
             case WizardMode::ConfirmUninstallSelf:
                 body = self->render_confirm_uninstall_self();
                 break;
+            case WizardMode::UpdatingSelf:
+            case WizardMode::UpdatingMihomo:
+                body = self->render_updating();
+                break;
             case WizardMode::Failed:
                 body = self->render_failed();
                 break;
@@ -1067,6 +1173,8 @@ Component InstallWizard::component() {
                 case WizardMode::Verifying:
                 case WizardMode::Installing:
                 case WizardMode::Uninstalling:
+                case WizardMode::UpdatingSelf:
+                case WizardMode::UpdatingMihomo:
                     // Signal cancellation; worker will check cancel_flag and exit
                     self->cancel_flag.store(true);
                     self->join_worker();  // join_worker resets cancel_flag after join
@@ -1134,7 +1242,16 @@ Component InstallWizard::component() {
                     return true;
                 }
 
-                case WizardMode::Complete:
+                case WizardMode::Complete: {
+                    bool self_replaced;
+                    {
+                        std::lock_guard<std::mutex> lock(self->mtx);
+                        self_replaced = self->self_update_applied;
+                    }
+                    if (self_replaced && self->callbacks.request_exit) {
+                        self->callbacks.request_exit();
+                        return true;
+                    }
                     self->set_mode(WizardMode::Check);
                     self->initial_check_done = false;
                     self->service_status_cached = false;
@@ -1143,6 +1260,7 @@ Component InstallWizard::component() {
                         self->status_msg.clear();
                     }
                     return true;
+                }
 
                 default:
                     break;
@@ -1195,6 +1313,36 @@ Component InstallWizard::component() {
                 self->is_upgrade = true;
                 self->do_fetch_release();
                 return true;
+            }
+
+            // S/s: Apply self-update (from Installed state, when available)
+            if ((ch == "S" || ch == "s") && mode == WizardMode::Installed) {
+                bool avail;
+                {
+                    std::lock_guard<std::mutex> lock(self->mtx);
+                    avail = self->self_update_available;
+                }
+                if (avail) {
+                    self->do_update_self();
+                    return true;
+                }
+            }
+
+            // M/m: Apply mihomo update (from Installed state, when available)
+            if ((ch == "M" || ch == "m") && mode == WizardMode::Installed) {
+                bool mihomo_avail = false;
+                {
+                    std::lock_guard<std::mutex> lock(self->mtx);
+                    if (self->self_update_checked && !self->latest_version.empty()
+                        && !self->current_version.empty()) {
+                        mihomo_avail = Installer::is_newer_version(
+                            self->current_version, self->latest_version);
+                    }
+                }
+                if (mihomo_avail) {
+                    self->do_update_mihomo();
+                    return true;
+                }
             }
 
             // 1: Service start/stop toggle (from Installed state)
