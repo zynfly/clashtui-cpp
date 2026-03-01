@@ -137,6 +137,12 @@ struct Strings {
     const char* uninstall_self_confirm;
     const char* uninstall_self_remove_config;
     const char* uninstall_self_complete;
+
+    // Self version / update check in install wizard
+    const char* install_self_version;
+    const char* install_self_up_to_date;
+    const char* install_self_update_available;
+    const char* install_checking_updates;
 };
 
 #include "i18n/en.hpp"

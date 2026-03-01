@@ -135,4 +135,10 @@ inline constexpr Strings ZH_STRINGS_DEF = {
     "从系统中移除 clashtui-cpp？",
     "同时删除配置目录？",
     "clashtui-cpp 已卸载",
+
+    // Self version / update check
+    "clashtui-cpp",
+    "已是最新",
+    "有更新可用",
+    "检查更新中...",
 };

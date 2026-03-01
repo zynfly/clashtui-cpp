@@ -1,6 +1,7 @@
 #include "ui/install_wizard.hpp"
 #include "core/config.hpp"
 #include "core/installer.hpp"
+#include "core/updater.hpp"
 #include "i18n/i18n.hpp"
 
 #include <ftxui/dom/elements.hpp>
@@ -66,13 +67,19 @@ struct InstallWizard::Impl {
     float progress = 0.0f;
     std::string status_msg;
     std::string error_msg;
-    std::string current_version;
-    std::string latest_version;
+    std::string current_version;        // mihomo version
+    std::string latest_version;         // mihomo latest version
     std::string changelog;
     std::string proxy_info;             // which proxy/mirror is being used
     ReleaseInfo release_info;
     AssetInfo selected_asset;
     PlatformInfo platform;
+
+    // Self (clashtui-cpp) version / update state
+    std::string self_version;           // compiled-in version
+    std::string self_latest_version;    // from GitHub
+    bool self_update_checked = false;
+    bool self_update_available = false;
 
     // Background thread
     std::atomic<bool> cancel_flag{false};
@@ -136,10 +143,30 @@ struct InstallWizard::Impl {
         join_worker();
         worker = std::thread([this]() {
             set_mode(WizardMode::FetchingRelease);
-            set_status(T().install_fetching_release);
+            set_status(T().install_checking_updates);
             post_refresh();
 
+            // ── Check clashtui-cpp self-update ──────────────────────
             try {
+                Updater updater;
+                auto self_info = updater.check_for_update();
+                {
+                    std::lock_guard<std::mutex> lock(mtx);
+                    self_update_checked = true;
+                    self_latest_version = self_info.latest_version;
+                    self_update_available = self_info.available;
+                }
+            } catch (...) {
+                std::lock_guard<std::mutex> lock(mtx);
+                self_update_checked = true;
+                self_update_available = false;
+            }
+
+            // ── Check mihomo update ─────────────────────────────────
+            try {
+                set_status(T().install_fetching_release);
+                post_refresh();
+
                 auto release = Installer::fetch_latest_release();
                 if (release.version.empty()) {
                     set_error(T().err_download_failed);
@@ -164,10 +191,25 @@ struct InstallWizard::Impl {
                     changelog = release.changelog;
                 }
 
-                // If upgrading, check whether the version is actually newer
+                // If upgrading, check whether the mihomo version is actually newer
                 if (is_upgrade && !current_version.empty()) {
-                    if (!Installer::is_newer_version(current_version, release.version)) {
+                    bool mihomo_newer = Installer::is_newer_version(current_version, release.version);
+                    bool self_newer;
+                    {
+                        std::lock_guard<std::mutex> lock(mtx);
+                        self_newer = self_update_available;
+                    }
+
+                    if (!mihomo_newer && !self_newer) {
                         set_status(T().install_up_to_date);
+                        set_mode(WizardMode::Installed);
+                        post_refresh();
+                        return;
+                    }
+
+                    if (!mihomo_newer) {
+                        // Only self update available, go back to installed view with info
+                        set_status("");
                         set_mode(WizardMode::Installed);
                         post_refresh();
                         return;
@@ -525,6 +567,12 @@ struct InstallWizard::Impl {
             installed = callbacks.is_installed();
         }
 
+        // Always set self version
+        {
+            std::lock_guard<std::mutex> lock(mtx);
+            self_version = Updater::current_version();
+        }
+
         if (installed) {
             if (callbacks.get_version) {
                 std::lock_guard<std::mutex> lock(mtx);
@@ -603,10 +651,20 @@ struct InstallWizard::Impl {
     Element render_installed() {
         std::string ver;
         std::string status_copy;
+        std::string self_ver;
+        std::string self_latest;
+        std::string mihomo_latest;
+        bool self_checked;
+        bool self_avail;
         {
             std::lock_guard<std::mutex> lock(mtx);
             ver = current_version;
             status_copy = status_msg;
+            self_ver = self_version;
+            self_latest = self_latest_version;
+            mihomo_latest = latest_version;
+            self_checked = self_update_checked;
+            self_avail = self_update_available;
         }
 
         bool active = cached_service_active;
@@ -629,11 +687,37 @@ struct InstallWizard::Impl {
             }));
         }
 
+        // clashtui-cpp version
+        if (!self_ver.empty()) {
+            Elements self_line;
+            self_line.push_back(text(" " + std::string(T().install_self_version) + ": ") | dim);
+            self_line.push_back(text("v" + self_ver));
+            if (self_checked) {
+                if (self_avail && !self_latest.empty()) {
+                    self_line.push_back(text(" -> v" + self_latest) | color(Color::Yellow));
+                    self_line.push_back(text(" (" + std::string(T().install_self_update_available) + ")") | color(Color::Yellow));
+                } else {
+                    self_line.push_back(text(" (" + std::string(T().install_self_up_to_date) + ")") | color(Color::Green));
+                }
+            }
+            content.push_back(hbox(std::move(self_line)));
+        }
+
+        // mihomo version
         if (!ver.empty()) {
-            content.push_back(hbox({
-                text(" Version: ") | dim,
-                text(ver),
-            }));
+            Elements mihomo_line;
+            mihomo_line.push_back(text(" mihomo: ") | dim);
+            mihomo_line.push_back(text(ver));
+            if (self_checked && !mihomo_latest.empty()) {
+                bool mihomo_newer = Installer::is_newer_version(ver, mihomo_latest);
+                if (mihomo_newer) {
+                    mihomo_line.push_back(text(" -> " + mihomo_latest) | color(Color::Yellow));
+                    mihomo_line.push_back(text(" (" + std::string(T().install_self_update_available) + ")") | color(Color::Yellow));
+                } else {
+                    mihomo_line.push_back(text(" (" + std::string(T().install_self_up_to_date) + ")") | color(Color::Green));
+                }
+            }
+            content.push_back(hbox(std::move(mihomo_line)));
         }
 
         // Show status message (e.g. "up to date", "service started")

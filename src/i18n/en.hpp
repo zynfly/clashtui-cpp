@@ -135,4 +135,10 @@ inline constexpr Strings EN_STRINGS_DEF = {
     "Remove clashtui-cpp from this system?",
     "Also remove config directory?",
     "clashtui-cpp uninstalled",
+
+    // Self version / update check
+    "clashtui-cpp",
+    "up to date",
+    "update available",
+    "Checking for updates...",
 };
