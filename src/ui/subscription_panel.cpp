@@ -146,7 +146,7 @@ Component SubscriptionPanel::component() {
             });
 
             if (i == self->selected) {
-                row = row | inverted | bold;
+                row = ftxui::focus(row | inverted | bold);
             }
             if (is_active) {
                 row = row | color(Color::Green);
@@ -179,7 +179,7 @@ Component SubscriptionPanel::component() {
         }
 
         content.push_back(separator());
-        content.push_back(vbox(std::move(rows)) | flex);
+        content.push_back(vbox(std::move(rows)) | vscroll_indicator | yframe | flex);
         content.push_back(separator());
         content.push_back(footer);
 

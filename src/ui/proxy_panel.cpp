@@ -115,16 +115,19 @@ struct ProxyPanel::Impl {
             else if (g.type == "LoadBalance") badge = "[LB]";
             else badge = "[" + g.type + "]";
 
+            std::string prefix = (i == selected_group) ? "▶ " : "  ";
+
             auto line = hbox({
+                text(prefix),
                 text(g.name) | flex,
                 text(" " + badge) | dim,
             });
 
             if (i == selected_group) {
                 if (focus_column == 0) {
-                    line = line | inverted | bold;
+                    line = ftxui::focus(line | inverted | bold);
                 } else {
-                    line = line | bold;
+                    line = ftxui::select(line | bold | color(Color::Cyan));
                 }
             }
 
@@ -135,7 +138,7 @@ struct ProxyPanel::Impl {
             items.push_back(text("  (no groups)") | dim);
         }
 
-        return vbox(std::move(items)) | vscroll_indicator | frame |
+        return vbox(std::move(items)) | vscroll_indicator | yframe |
                border | size(WIDTH, GREATER_THAN, 20);
     }
 
@@ -168,9 +171,9 @@ struct ProxyPanel::Impl {
 
             if (i == selected_node) {
                 if (focus_column == 1) {
-                    line = line | inverted | bold;
+                    line = ftxui::focus(line | inverted | bold);
                 } else {
-                    line = line | bold;
+                    line = ftxui::select(line | bold);
                 }
             }
 
@@ -181,7 +184,7 @@ struct ProxyPanel::Impl {
             items.push_back(text("  (empty group)") | dim);
         }
 
-        return vbox(std::move(items)) | vscroll_indicator | frame |
+        return vbox(std::move(items)) | vscroll_indicator | yframe |
                border | flex;
     }
 
@@ -253,11 +256,54 @@ void ProxyPanel::refresh_data() {
     }
     std::sort(impl_->group_names.begin(), impl_->group_names.end());
 
-    // Clamp selections
+    // Auto-select group on first load:
+    // 1. Try GLOBAL's "now" if it points to a sub-group
+    // 2. Fallback: first Selector group that isn't GLOBAL
+    if (impl_->selected_group == 0 && !impl_->group_names.empty()) {
+        bool found = false;
+        // Try GLOBAL.now → sub-group
+        auto git = impl_->groups.find("GLOBAL");
+        if (git != impl_->groups.end() && !git->second.now.empty()) {
+            for (int i = 0; i < (int)impl_->group_names.size(); ++i) {
+                if (impl_->group_names[i] == git->second.now) {
+                    impl_->selected_group = i;
+                    found = true;
+                    break;
+                }
+            }
+        }
+        // Fallback: first non-GLOBAL Selector group
+        if (!found) {
+            for (int i = 0; i < (int)impl_->group_names.size(); ++i) {
+                auto it = impl_->groups.find(impl_->group_names[i]);
+                if (it != impl_->groups.end() &&
+                    it->second.type == "Selector" &&
+                    it->second.name != "GLOBAL") {
+                    impl_->selected_group = i;
+                    break;
+                }
+            }
+        }
+    }
+
+    // Clamp group selection
     if (impl_->selected_group >= (int)impl_->group_names.size()) {
         impl_->selected_group = std::max(0, (int)impl_->group_names.size() - 1);
     }
+
+    // Auto-select the active node within the group on first load
     auto node_names = impl_->current_node_names();
+    if (impl_->selected_node == 0 && !node_names.empty()) {
+        auto* g = impl_->current_group();
+        if (g && !g->now.empty()) {
+            for (int i = 0; i < (int)node_names.size(); ++i) {
+                if (node_names[i] == g->now) {
+                    impl_->selected_node = i;
+                    break;
+                }
+            }
+        }
+    }
     if (impl_->selected_node >= (int)node_names.size()) {
         impl_->selected_node = std::max(0, (int)node_names.size() - 1);
     }
