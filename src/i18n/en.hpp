@@ -32,6 +32,7 @@ inline constexpr Strings EN_STRINGS_DEF = {
     "Downloading...",
     "Success",
     "Failed",
+    "Auto",
 
     // Install wizard
     "Install Wizard",
@@ -51,8 +52,8 @@ inline constexpr Strings EN_STRINGS_DEF = {
     "Requires sudo",
     "User install (no sudo)",
     "Check for updates",
-    "Already up to date",
-    "New version available",
+    "up to date",
+    "update available",
     "Upgrade",
     "Press Enter to download",
     "Trying direct download...",
@@ -138,8 +139,6 @@ inline constexpr Strings EN_STRINGS_DEF = {
 
     // Self version / update check
     "clashtui-cpp",
-    "up to date",
-    "update available",
     "Checking for updates...",
 
     // TUI Update actions

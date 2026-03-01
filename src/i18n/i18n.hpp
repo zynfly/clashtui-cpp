@@ -34,6 +34,7 @@ struct Strings {
     const char* sub_downloading;
     const char* sub_success;
     const char* sub_failed;
+    const char* sub_auto_interval;
 
     // Install wizard
     const char* install_title;
@@ -140,8 +141,6 @@ struct Strings {
 
     // Self version / update check in install wizard
     const char* install_self_version;
-    const char* install_self_up_to_date;
-    const char* install_self_update_available;
     const char* install_checking_updates;
 
     // TUI Update actions

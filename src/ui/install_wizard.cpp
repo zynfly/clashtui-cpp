@@ -654,10 +654,10 @@ struct InstallWizard::Impl {
 
     Element render_not_installed() {
         auto plat_str = platform.os + "-" + platform.arch;
-        auto opt_system = text("   /usr/local/bin/mihomo (" +
-                               std::string(T().install_needs_sudo) + ")");
-        auto opt_user = text("   ~/.local/bin/mihomo (" +
-                             std::string(T().install_user_only) + ")");
+        auto opt_system = text("   /usr/local/bin/mihomo [" +
+                               std::string(T().install_needs_sudo) + "]");
+        auto opt_user = text("   ~/.local/bin/mihomo [" +
+                             std::string(T().install_user_only) + "]");
 
         if (selected_path == 0) {
             opt_system = hbox({text(" > "), opt_system}) | inverted;
@@ -754,8 +754,8 @@ struct InstallWizard::Impl {
             }
             auto self_badge = self_checked
                 ? (self_avail && !self_latest.empty()
-                    ? text(" [" + std::string(T().install_self_update_available) + "] ") | color(Color::Yellow)
-                    : text(" [" + std::string(T().install_self_up_to_date) + "] ") | color(Color::Green))
+                    ? text(" [" + std::string(T().install_upgrade_available) + "] ") | color(Color::Yellow)
+                    : text(" [" + std::string(T().install_up_to_date) + "] ") | color(Color::Green))
                 : text("");
             content.push_back(hbox({hbox(std::move(self_left)), filler(), self_badge}));
         }
@@ -772,8 +772,8 @@ struct InstallWizard::Impl {
             }
             auto mihomo_badge = self_checked
                 ? (mihomo_newer
-                    ? text(" [" + std::string(T().install_self_update_available) + "] ") | color(Color::Yellow)
-                    : text(" [" + std::string(T().install_self_up_to_date) + "] ") | color(Color::Green))
+                    ? text(" [" + std::string(T().install_upgrade_available) + "] ") | color(Color::Yellow)
+                    : text(" [" + std::string(T().install_up_to_date) + "] ") | color(Color::Green))
                 : text("");
             content.push_back(hbox({hbox(std::move(mihomo_left)), filler(), mihomo_badge}));
         }
@@ -871,8 +871,8 @@ struct InstallWizard::Impl {
         }));
         content.push_back(hbox({
             text(" File: ") | dim,
-            text(asset_name),
-            text(" (" + format_size(asset_size) + ")") | dim,
+            text(asset_name) | flex,
+            text(" [" + format_size(asset_size) + "] ") | dim,
         }));
 
         // Show changelog (truncated to a few lines)
@@ -987,7 +987,7 @@ struct InstallWizard::Impl {
         if (self_replaced) {
             content.push_back(text(" " + std::string(T().update_restart_tui)) | color(Color::Yellow));
             content.push_back(separator());
-            content.push_back(text(" Enter = " + std::string(T().confirm) + " (" + std::string(T().update_restart_tui) + ")") | dim);
+            content.push_back(text(" Enter = " + std::string(T().confirm) + ", Esc = back") | dim);
         } else {
             content.push_back(separator());
             content.push_back(text(" Enter = OK, Esc = back") | dim);
@@ -1029,11 +1029,9 @@ struct InstallWizard::Impl {
     }
 
     Element render_confirm_uninstall_self() {
-        std::string cfg_label = std::string(T().uninstall_self_remove_config)
-                                + " (" + Config::config_dir() + ")";
         auto opt_cfg = remove_self_config
-                           ? text(" [x] " + cfg_label)
-                           : text(" [ ] " + cfg_label);
+                           ? text(" [x] " + std::string(T().uninstall_self_remove_config))
+                           : text(" [ ] " + std::string(T().uninstall_self_remove_config));
 
         return vbox({
             text(" " + std::string(T().uninstall_self_title)) | color(Color::Red) | bold,
@@ -1041,6 +1039,7 @@ struct InstallWizard::Impl {
             text(" " + std::string(T().uninstall_self_confirm)) | color(Color::Yellow),
             separator(),
             opt_cfg | dim,
+            text("     " + Config::config_dir()) | dim,
             separator(),
             text(" [Y] " + std::string(T().confirm) +
                  "  [N] " + std::string(T().cancel)) | dim,

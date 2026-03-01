@@ -32,6 +32,7 @@ inline constexpr Strings ZH_STRINGS_DEF = {
     "下载中...",
     "成功",
     "失败",
+    "周期",
 
     // Install wizard
     "安装向导",
@@ -51,8 +52,8 @@ inline constexpr Strings ZH_STRINGS_DEF = {
     "需要 sudo 权限",
     "用户安装 (无需 sudo)",
     "检查更新",
-    "已是最新版本",
-    "有新版本可用",
+    "已最新",
+    "有更新",
     "升级",
     "按回车下载安装",
     "尝试直接下载...",
@@ -138,8 +139,6 @@ inline constexpr Strings ZH_STRINGS_DEF = {
 
     // Self version / update check
     "clashtui-cpp",
-    "已是最新",
-    "有更新可用",
     "检查更新中...",
 
     // TUI Update actions

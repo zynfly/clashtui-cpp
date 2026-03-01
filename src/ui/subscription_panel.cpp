@@ -163,9 +163,9 @@ Component SubscriptionPanel::component() {
             text(" [A]") | bold, text(T().sub_add),
             text("  [U]") | bold, text(T().sub_update),
             text("  [D]") | bold, text(T().sub_delete),
-            text("  [T]") | bold, text("Auto"),
+            text("  [T]") | bold, text(T().sub_auto_interval),
             text("  [Enter]") | bold, text(T().profile_switch),
-            text("  [Esc]") | bold, text("Back"),
+            text("  [Esc]") | bold, text(T().cancel),
         }) | dim;
 
         Elements content;
