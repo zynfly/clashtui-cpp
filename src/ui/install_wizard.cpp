@@ -4,6 +4,7 @@
 #include "core/updater.hpp"
 #include "daemon/ipc_client.hpp"
 #include "i18n/i18n.hpp"
+#include "core/utils.hpp"
 
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/component/event.hpp>
@@ -17,18 +18,6 @@
 namespace fs = std::filesystem;
 using namespace ftxui;
 
-static std::string shell_quote(const std::string& s) {
-    std::string result = "'";
-    for (char c : s) {
-        if (c == '\'') {
-            result += "'\\''";
-        } else {
-            result += c;
-        }
-    }
-    result += "'";
-    return result;
-}
 
 // ── State machine ───────────────────────────────────────────────
 

@@ -45,6 +45,11 @@ struct App::Impl {
     // Background threads
     std::atomic<bool> stop_flag{false};
     std::thread status_thread;
+    std::thread update_check_thread;
+
+    // Speed calculation state
+    int64_t prev_upload_total = 0;
+    int64_t prev_download_total = 0;
 
     // Cached daemon availability
     std::atomic<bool> daemon_available{false};
@@ -86,10 +91,18 @@ struct App::Impl {
         };
 
         cb.on_panel_switch = [this](int panel) {
+            // Deactivate log panel when leaving it
+            if (current_panel == 2 && panel != 2) {
+                log_panel.on_deactivate();
+            }
             current_panel = panel;
             // Refresh profile list when switching to subscription panel
             if (panel == 1) {
                 subscription_panel.refresh_profiles();
+            }
+            // Activate log panel when switching to it
+            if (panel == 2) {
+                log_panel.on_activate();
             }
         };
 
@@ -112,6 +125,14 @@ struct App::Impl {
 
                     if (ok) {
                         auto stats = client->get_connections();
+                        // Compute speed from delta (poll interval is ~2 seconds)
+                        stats.upload_speed = (stats.upload_total - prev_upload_total) / 2;
+                        stats.download_speed = (stats.download_total - prev_download_total) / 2;
+                        // Avoid negative speed on first poll or counter reset
+                        if (stats.upload_speed < 0) stats.upload_speed = 0;
+                        if (stats.download_speed < 0) stats.download_speed = 0;
+                        prev_upload_total = stats.upload_total;
+                        prev_download_total = stats.download_total;
                         status_bar.set_connections(
                             stats.active_connections,
                             stats.upload_speed,
@@ -142,6 +163,9 @@ struct App::Impl {
         stop_flag.store(true);
         if (status_thread.joinable()) {
             status_thread.join();
+        }
+        if (update_check_thread.joinable()) {
+            update_check_thread.join();
         }
     }
 };
@@ -353,14 +377,15 @@ void App::run() {
     impl_->start_status_thread();
 
     // Check for updates in background
-    std::thread([this] {
+    impl_->update_check_thread = std::thread([this] {
         Updater updater;
         auto info = updater.check_for_update();
+        if (impl_->stop_flag.load()) return;  // App shutting down, don't touch UI
         if (info.available) {
             impl_->status_bar.set_update_available(info.latest_version);
             impl_->screen.Post(Event::Custom);
         }
-    }).detach();
+    });
 
     // Run the TUI
     impl_->screen.Loop(impl_->main_screen.component());

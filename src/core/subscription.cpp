@@ -1,6 +1,6 @@
 #include "core/subscription.hpp"
+#include "core/utils.hpp"
 
-#define CPPHTTPLIB_OPENSSL_SUPPORT
 #include <httplib.h>
 #include <fstream>
 #include <filesystem>
@@ -10,37 +10,15 @@ namespace fs = std::filesystem;
 Subscription::DownloadResult Subscription::download(const std::string& url) {
     DownloadResult result;
 
-    // Parse URL to extract host and path
-    std::string scheme, host, path;
-    int port = 443;
-
-    auto pos = url.find("://");
-    if (pos != std::string::npos) {
-        scheme = url.substr(0, pos);
-        auto rest = url.substr(pos + 3);
-        auto path_pos = rest.find('/');
-        if (path_pos != std::string::npos) {
-            host = rest.substr(0, path_pos);
-            path = rest.substr(path_pos);
-        } else {
-            host = rest;
-            path = "/";
-        }
-    } else {
+    auto parts = parse_url(url);
+    if (parts.scheme.empty()) {
         result.error = "Invalid URL";
         return result;
     }
-
-    // Check for port in host
-    auto colon = host.find(':');
-    if (colon != std::string::npos) {
-        try {
-            port = std::stoi(host.substr(colon + 1));
-        } catch (...) {}
-        host = host.substr(0, colon);
-    } else {
-        port = (scheme == "https") ? 443 : 80;
-    }
+    const auto& scheme = parts.scheme;
+    const auto& host = parts.host;
+    const auto& path = parts.path;
+    int port = parts.port;
 
     try {
         httplib::Headers headers = {

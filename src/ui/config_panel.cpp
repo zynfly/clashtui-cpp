@@ -71,22 +71,22 @@ Component ConfigPanel::component() {
         auto children = container->ChildAt(0);
 
         return vbox({
-            text(" Config") | bold,
+            text(" " + std::string(T().config_title)) | bold,
             separator(),
-            text(" API Connection") | bold | dim,
-            make_row("Host", container->ChildAt(0)->Render()),
-            make_row("Port", container->ChildAt(1)->Render()),
-            make_row("Secret", container->ChildAt(2)->Render()),
-            make_row("Timeout(ms)", container->ChildAt(3)->Render()),
+            text(" " + std::string(T().config_api_connection)) | bold | dim,
+            make_row(T().config_host, container->ChildAt(0)->Render()),
+            make_row(T().config_port, container->ChildAt(1)->Render()),
+            make_row(T().config_secret, container->ChildAt(2)->Render()),
+            make_row(T().config_timeout, container->ChildAt(3)->Render()),
             separator(),
-            text(" Display") | bold | dim,
+            text(" " + std::string(T().config_display)) | bold | dim,
             hbox({
-                text(" Language: ") | size(WIDTH, EQUAL, 16),
+                text(" " + std::string(T().config_language) + ": ") | size(WIDTH, EQUAL, 16),
                 text(current_lang == Lang::ZH ? "中文" : "English"),
-                text("  (Ctrl+L to toggle)") | dim,
+                text("  (" + std::string(T().config_lang_toggle) + ")") | dim,
             }),
             separator(),
-            text(" Press Ctrl+S to save") | dim,
+            text(" " + std::string(T().config_save_hint)) | dim,
         }) | border;
     }) | CatchEvent([self](Event event) -> bool {
         // Ctrl+S: save

@@ -60,13 +60,13 @@ struct MainScreen::Impl {
                 text("  [I]") | bold,
                 text(T().install_title),
                 text("  [L]") | bold,
-                text("Log"),
+                text(T().footer_log),
                 text("  [C]") | bold,
-                text("Config"),
+                text(T().footer_config),
                 text("  [Alt+1-3]") | bold,
-                text("Mode"),
+                text(T().footer_mode),
                 text("  [Q]") | bold,
-                text("Quit"),
+                text(T().footer_quit),
                 text("  "),
             }) | dim;
 

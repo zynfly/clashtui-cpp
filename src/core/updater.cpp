@@ -1,12 +1,12 @@
 #include "core/updater.hpp"
 #include "core/installer.hpp"
 #include "core/config.hpp"
+#include "core/utils.hpp"
 
 #ifndef APP_VERSION
 #define APP_VERSION "0.0.0"
 #endif
 
-#define CPPHTTPLIB_OPENSSL_SUPPORT
 #include <httplib.h>
 #include <nlohmann/json.hpp>
 #include <sys/utsname.h>
@@ -166,22 +166,6 @@ std::string Updater::get_self_path() {
     return "";
 }
 
-// ════════════════════════════════════════════════════════════════
-// Shell-escape helper (local to this TU)
-// ════════════════════════════════════════════════════════════════
-
-static std::string updater_shell_quote(const std::string& s) {
-    std::string result = "'";
-    for (char c : s) {
-        if (c == '\'') {
-            result += "'\\''";
-        } else {
-            result += c;
-        }
-    }
-    result += "'";
-    return result;
-}
 
 // ════════════════════════════════════════════════════════════════
 // atomic_replace_binary — safe binary replacement via rename()
@@ -207,13 +191,13 @@ std::string Updater::atomic_replace_binary(const std::string& new_binary,
         }
     } else {
         // Need sudo — use cp to temp then mv (atomic) to target
-        std::string cmd = "sudo cp " + updater_shell_quote(new_binary) + " " +
-                          updater_shell_quote(tmp_dest) +
-                          " && sudo chmod +x " + updater_shell_quote(tmp_dest) +
-                          " && sudo mv " + updater_shell_quote(tmp_dest) + " " +
-                          updater_shell_quote(target_path);
+        std::string cmd = "sudo cp " + shell_quote(new_binary) + " " +
+                          shell_quote(tmp_dest) +
+                          " && sudo chmod +x " + shell_quote(tmp_dest) +
+                          " && sudo mv " + shell_quote(tmp_dest) + " " +
+                          shell_quote(target_path);
         if (system(cmd.c_str()) != 0) {
-            std::string cleanup = "sudo rm -f " + updater_shell_quote(tmp_dest);
+            std::string cleanup = "sudo rm -f " + shell_quote(tmp_dest);
             system(cleanup.c_str());
             return "Failed to replace binary (sudo failed)";
         }
@@ -318,8 +302,8 @@ UpdateResult Updater::apply_self_update() const {
 
         // Step 4: Extract .tar.gz
         fs::create_directories(tmp_extract_dir);
-        std::string tar_cmd = "tar xzf " + updater_shell_quote(tmp_archive) +
-                              " -C " + updater_shell_quote(tmp_extract_dir);
+        std::string tar_cmd = "tar xzf " + shell_quote(tmp_archive) +
+                              " -C " + shell_quote(tmp_extract_dir);
         if (system(tar_cmd.c_str()) != 0) {
             result.message = "Failed to extract update archive";
             try { fs::remove(tmp_archive); } catch (...) {}

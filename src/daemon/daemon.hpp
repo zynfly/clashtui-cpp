@@ -8,6 +8,7 @@
 #include <memory>
 #include <atomic>
 #include <thread>
+#include <mutex>
 #include <string>
 
 class Daemon {
@@ -38,6 +39,7 @@ private:
 
     // Auto-update
     std::thread auto_update_thread_;
+    std::mutex profile_mutex_;  // serialize profile operations
     void auto_update_loop();
 
     // Helper

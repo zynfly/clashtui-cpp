@@ -150,4 +150,22 @@ inline constexpr Strings ZH_STRINGS_DEF = {
     "请手动重启守护进程",
     "请退出并重新启动",
     "更新中...",
+
+    // Footer
+    "日志",
+    "配置",
+    "模式",
+    "退出",
+
+    // Config panel
+    "配置",
+    "API 连接",
+    "主机",
+    "端口",
+    "密钥",
+    "超时(ms)",
+    "显示",
+    "语言",
+    "Ctrl+L 切换",
+    "按 Ctrl+S 保存",
 };

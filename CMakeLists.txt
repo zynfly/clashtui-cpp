@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(clashtui-cpp VERSION 0.5.6 LANGUAGES CXX)
+project(clashtui-cpp VERSION 0.5.7 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -49,6 +49,7 @@ target_link_libraries(clashtui-cpp PRIVATE
 # Embed version for self-update checks
 target_compile_definitions(clashtui-cpp PRIVATE
     APP_VERSION="${PROJECT_VERSION}"
+    CPPHTTPLIB_OPENSSL_SUPPORT
 )
 
 install(TARGETS clashtui-cpp DESTINATION bin)
@@ -110,6 +111,7 @@ target_link_libraries(clashtui-tests PRIVATE
 
 target_compile_definitions(clashtui-tests PRIVATE
     APP_VERSION="${PROJECT_VERSION}"
+    CPPHTTPLIB_OPENSSL_SUPPORT
 )
 
 include(GoogleTest)
@@ -138,6 +140,7 @@ target_link_libraries(clashtui-e2e PRIVATE
 
 target_compile_definitions(clashtui-e2e PRIVATE
     APP_VERSION="${PROJECT_VERSION}"
+    CPPHTTPLIB_OPENSSL_SUPPORT
 )
 
 gtest_discover_tests(clashtui-e2e)

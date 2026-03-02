@@ -1,5 +1,6 @@
 #include "ui/log_panel.hpp"
 #include "i18n/i18n.hpp"
+#include "core/config.hpp"
 
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/component/event.hpp>
@@ -80,7 +81,9 @@ struct LogPanel::Impl {
         std::tm tm{};
         localtime_r(&t, &tm);
         std::ostringstream oss;
-        oss << "clashtui-logs-" << std::put_time(&tm, "%Y%m%d-%H%M%S") << ".log";
+        std::string dir = Config::config_dir();
+        if (dir.empty()) dir = ".";
+        oss << dir << "/clashtui-logs-" << std::put_time(&tm, "%Y%m%d-%H%M%S") << ".log";
 
         std::ofstream out(oss.str());
         if (!out.is_open()) return;

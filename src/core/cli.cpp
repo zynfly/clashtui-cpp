@@ -80,7 +80,7 @@ int CLI::cmd_help() {
         "  clashtui-cpp version        Show version\n"
         "  clashtui-cpp help           Show this help\n"
         "\n"
-        "Setup (add to ~/.bashrc or ~/.zshrc, one-time):\n"
+        "Setup (add to ~/.profile or ~/.zprofile, one-time):\n"
         "  eval \"$(clashtui-cpp init bash)\"   # for bash\n"
         "  eval \"$(clashtui-cpp init zsh)\"    # for zsh\n"
         "\n"
@@ -124,9 +124,15 @@ int CLI::cmd_init(int argc, char* argv[]) {
         return 1;
     }
 
-    // Output a shell function that wraps proxy on/off with eval,
-    // and auto-enables proxy on shell startup if previously enabled
+    // Output auto-enable first (works in both interactive and non-interactive),
+    // then shell function wrapper (only useful interactively but harmless otherwise)
     std::cout <<
+        "# clashtui-cpp: auto-enable proxy if previously set to on\n"
+        "if command clashtui-cpp proxy is-enabled >/dev/null 2>&1; then\n"
+        "  eval \"$(command clashtui-cpp proxy env)\"\n"
+        "fi\n"
+        "\n"
+        "# clashtui-cpp: shell function wrapper for proxy on/off\n"
         "clashtui-cpp() {\n"
         "  case \"$1\" in\n"
         "    proxy)\n"
@@ -143,12 +149,7 @@ int CLI::cmd_init(int argc, char* argv[]) {
         "      command clashtui-cpp \"$@\"\n"
         "      ;;\n"
         "  esac\n"
-        "}\n"
-        "\n"
-        "# Auto-enable proxy if previously set to on\n"
-        "if command clashtui-cpp proxy is-enabled >/dev/null 2>&1; then\n"
-        "  eval \"$(command clashtui-cpp proxy env)\"\n"
-        "fi\n";
+        "}\n";
 
     return 0;
 }
@@ -223,10 +224,10 @@ int CLI::proxy_on() {
             "NOTE: Shell init not detected. To make proxy on/off work directly,\n"
             "add this to your shell config:\n"
             "\n"
-            "  # For bash (~/.bashrc):\n"
+            "  # For bash (~/.profile):\n"
             "  eval \"$(clashtui-cpp init bash)\"\n"
             "\n"
-            "  # For zsh (~/.zshrc):\n"
+            "  # For zsh (~/.zprofile):\n"
             "  eval \"$(clashtui-cpp init zsh)\"\n"
             "\n"
             "Without it, use:  eval \"$(clashtui-cpp proxy env)\"\n";

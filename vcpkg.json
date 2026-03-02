@@ -1,6 +1,6 @@
 {
   "name": "clashtui-cpp",
-  "version": "0.1.0",
+  "version": "0.5.7",
   "dependencies": [
     "ftxui",
     "nlohmann-json",

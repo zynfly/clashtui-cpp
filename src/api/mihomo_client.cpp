@@ -1,6 +1,5 @@
 #include "api/mihomo_client.hpp"
 
-#define CPPHTTPLIB_OPENSSL_SUPPORT
 #include <httplib.h>
 #include <nlohmann/json.hpp>
 #include <sstream>
@@ -314,8 +313,9 @@ void MihomoClient::stream_logs(const std::string& level,
                                 std::atomic<bool>& stop_flag) {
     try {
         auto cli = impl_->make_client();
-        // SSE connections are long-lived
-        cli->set_read_timeout(0, 0); // no timeout
+        // SSE connections are long-lived; use large timeout (24h)
+        // Note: set_read_timeout(0, 0) means non-blocking (immediate timeout), not infinite
+        cli->set_read_timeout(86400, 0);
 
         std::string path = "/logs?level=" + level;
         std::string buffer;

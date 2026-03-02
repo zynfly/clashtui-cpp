@@ -1,6 +1,6 @@
 #include "core/installer.hpp"
+#include "core/utils.hpp"
 
-#define CPPHTTPLIB_OPENSSL_SUPPORT
 #include <httplib.h>
 #include <nlohmann/json.hpp>
 #include <openssl/evp.h>
@@ -21,30 +21,6 @@ using json = nlohmann::json;
 // Private helpers
 // ════════════════════════════════════════════════════════════════
 
-/// Shell-escape a string by wrapping in single quotes and escaping embedded quotes
-static std::string shell_quote(const std::string& s) {
-    std::string result = "'";
-    for (char c : s) {
-        if (c == '\'') {
-            result += "'\\''";
-        } else {
-            result += c;
-        }
-    }
-    result += "'";
-    return result;
-}
-
-/// Validate a service name: only allow alphanumeric, dash, underscore, dot
-static bool is_valid_service_name(const std::string& name) {
-    if (name.empty()) return false;
-    for (char c : name) {
-        if (!std::isalnum(static_cast<unsigned char>(c)) && c != '-' && c != '_' && c != '.') {
-            return false;
-        }
-    }
-    return true;
-}
 
 Installer::UrlParts Installer::parse_url(const std::string& url) {
     UrlParts parts;

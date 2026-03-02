@@ -152,6 +152,24 @@ struct Strings {
     const char* update_restart_daemon_manual;
     const char* update_restart_tui;
     const char* update_in_progress;
+
+    // Footer
+    const char* footer_log;
+    const char* footer_config;
+    const char* footer_mode;
+    const char* footer_quit;
+
+    // Config panel
+    const char* config_title;
+    const char* config_api_connection;
+    const char* config_host;
+    const char* config_port;
+    const char* config_secret;
+    const char* config_timeout;
+    const char* config_display;
+    const char* config_language;
+    const char* config_lang_toggle;
+    const char* config_save_hint;
 };
 
 #include "i18n/en.hpp"

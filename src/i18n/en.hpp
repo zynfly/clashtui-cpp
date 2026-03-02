@@ -150,4 +150,22 @@ inline constexpr Strings EN_STRINGS_DEF = {
     "Please restart the daemon manually",
     "Please exit and restart",
     "Updating...",
+
+    // Footer
+    "Log",
+    "Config",
+    "Mode",
+    "Quit",
+
+    // Config panel
+    "Config",
+    "API Connection",
+    "Host",
+    "Port",
+    "Secret",
+    "Timeout(ms)",
+    "Display",
+    "Language",
+    "Ctrl+L to toggle",
+    "Press Ctrl+S to save",
 };

@@ -70,7 +70,7 @@ bool Daemon::start_ipc_server() {
     }
 
     // Allow non-root users to connect to daemon socket
-    chmod(path.c_str(), 0666);
+    chmod(path.c_str(), 0660);
 
     if (listen(socket_fd_, 5) < 0) {
         close(socket_fd_);
@@ -154,6 +154,7 @@ std::string Daemon::handle_command(const std::string& json_line) {
         }
 
         if (cmd == "profile_add") {
+            std::lock_guard<std::mutex> lock(profile_mutex_);
             std::string name = req.value("name", "");
             std::string url = req.value("url", "");
             auto result = profile_mgr_.add_profile(name, url);
@@ -164,6 +165,7 @@ std::string Daemon::handle_command(const std::string& json_line) {
         }
 
         if (cmd == "profile_update") {
+            std::lock_guard<std::mutex> lock(profile_mutex_);
             std::string name = req.value("name", "");
             auto result = profile_mgr_.update_profile(name);
             if (result.success) {
@@ -176,6 +178,7 @@ std::string Daemon::handle_command(const std::string& json_line) {
         }
 
         if (cmd == "profile_delete") {
+            std::lock_guard<std::mutex> lock(profile_mutex_);
             std::string name = req.value("name", "");
             if (profile_mgr_.delete_profile(name)) {
                 return json({{"ok", true}}).dump();
@@ -184,6 +187,7 @@ std::string Daemon::handle_command(const std::string& json_line) {
         }
 
         if (cmd == "profile_switch") {
+            std::lock_guard<std::mutex> lock(profile_mutex_);
             std::string name = req.value("name", "");
             if (profile_mgr_.switch_active(name)) {
                 reload_mihomo();
@@ -261,6 +265,7 @@ void Daemon::auto_update_loop() {
         auto due = profile_mgr_.profiles_due_for_update();
         for (const auto& name : due) {
             if (stop_flag_.load()) break;
+            std::lock_guard<std::mutex> lock(profile_mutex_);
             auto result = profile_mgr_.update_profile(name);
             if (result.success && result.was_active) {
                 reload_mihomo();
