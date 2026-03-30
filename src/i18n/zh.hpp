@@ -93,6 +93,8 @@ inline constexpr Strings ZH_STRINGS_DEF = {
     // Errors
     "API 请求失败",
     "下载失败",
+    "安装失败",
+    "sudo 需要密码，请先在其他终端运行 sudo -v",
     "配置无效",
     "节点切换失败",
 

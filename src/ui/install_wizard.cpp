@@ -14,6 +14,7 @@
 #include <mutex>
 #include <sstream>
 #include <thread>
+#include <unistd.h>
 
 namespace fs = std::filesystem;
 using namespace ftxui;
@@ -225,6 +226,17 @@ struct InstallWizard::Impl {
     void do_download_and_install() {
         join_worker();
         worker = std::thread([this]() {
+            // ── 0. Pre-check sudo access for non-root users ────
+            bool needs_sudo = (selected_path == 0) && (geteuid() != 0);
+            if (needs_sudo) {
+                int rc = system("sudo -n true 2>/dev/null");
+                if (rc != 0) {
+                    set_error(T().err_sudo_required);
+                    post_refresh();
+                    return;
+                }
+            }
+
             // ── 1. Download ─────────────────────────────────────
             set_mode(WizardMode::Downloading);
             {
@@ -293,18 +305,18 @@ struct InstallWizard::Impl {
             set_status(T().install_installing);
             post_refresh();
 
-            bool needs_sudo = (selected_path == 0);
+            bool install_needs_sudo = (selected_path == 0);
             std::string install_path = get_install_path();
 
             // Ensure parent directory exists for user-local install
-            if (!needs_sudo) {
+            if (!install_needs_sudo) {
                 auto parent = fs::path(install_path).parent_path();
                 std::error_code ec;
                 fs::create_directories(parent, ec);
             }
 
-            if (!Installer::install_binary(tmp_path, install_path, needs_sudo)) {
-                set_error(T().err_download_failed);
+            if (!Installer::install_binary(tmp_path, install_path, install_needs_sudo)) {
+                set_error(T().err_install_failed);
                 post_refresh();
                 return;
             }

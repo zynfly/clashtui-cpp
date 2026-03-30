@@ -93,6 +93,8 @@ inline constexpr Strings EN_STRINGS_DEF = {
     // Errors
     "API request failed",
     "Download failed",
+    "Install failed",
+    "sudo requires password, run 'sudo -v' in another terminal first",
     "Invalid configuration",
     "Node switch failed",
 

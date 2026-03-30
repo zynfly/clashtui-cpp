@@ -5,6 +5,7 @@
 #include <nlohmann/json.hpp>
 #include <openssl/evp.h>
 #include <sys/utsname.h>
+#include <unistd.h>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -561,17 +562,25 @@ bool Installer::install_binary(const std::string& gz_path,
             return false;
         }
 
+        // Skip sudo if already running as root
+        bool use_sudo = needs_sudo && (geteuid() != 0);
+
+        // Ensure parent directory exists
+        auto parent = fs::path(install_path).parent_path();
+        if (!parent.empty()) {
+            if (use_sudo) {
+                run_command("sudo mkdir -p " + shell_quote(parent.string()));
+            } else {
+                fs::create_directories(parent);
+            }
+        }
+
         // Move to final location
         std::string cmd;
-        if (needs_sudo) {
+        if (use_sudo) {
             cmd = "sudo cp " + shell_quote(temp_path) + " " + shell_quote(install_path) + " && "
                   "sudo chmod +x " + shell_quote(install_path);
         } else {
-            // Ensure parent directory exists
-            auto parent = fs::path(install_path).parent_path();
-            if (!parent.empty()) {
-                fs::create_directories(parent);
-            }
             cmd = "cp " + shell_quote(temp_path) + " " + shell_quote(install_path) + " && "
                   "chmod +x " + shell_quote(install_path);
         }

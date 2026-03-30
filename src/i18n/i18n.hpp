@@ -95,6 +95,8 @@ struct Strings {
     // Errors
     const char* err_api_failed;
     const char* err_download_failed;
+    const char* err_install_failed;
+    const char* err_sudo_required;
     const char* err_invalid_config;
     const char* err_node_switch_failed;
 
