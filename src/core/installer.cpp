@@ -357,7 +357,8 @@ bool Installer::verify_sha256(const std::string& file_path, const std::string& e
 bool Installer::download_single(const std::string& url,
                                 const std::string& dest_path,
                                 std::function<void(int64_t, int64_t)> on_progress,
-                                std::atomic<bool>* cancel_flag) {
+                                std::atomic<bool>* cancel_flag,
+                                int connection_timeout_sec) {
     try {
         auto parts = parse_url(url);
         if (parts.host.empty()) return false;
@@ -407,7 +408,7 @@ bool Installer::download_single(const std::string& url,
 
         if (parts.scheme == "https") {
             httplib::SSLClient cli(parts.host, parts.port);
-            cli.set_connection_timeout(15, 0);
+            cli.set_connection_timeout(connection_timeout_sec, 0);
             cli.set_read_timeout(120, 0);
             cli.set_follow_location(true);
 
@@ -415,7 +416,7 @@ bool Installer::download_single(const std::string& url,
             success = (res && res->status == 200);
         } else {
             httplib::Client cli(parts.host, parts.port);
-            cli.set_connection_timeout(15, 0);
+            cli.set_connection_timeout(connection_timeout_sec, 0);
             cli.set_read_timeout(120, 0);
             cli.set_follow_location(true);
 
@@ -439,21 +440,25 @@ bool Installer::download_single(const std::string& url,
 
 std::vector<std::string> Installer::get_proxy_mirrors() {
     return {
-        "",                          // direct (no mirror)
+        "",                                // direct (no mirror)
         "https://ghfast.top/",
+        "https://github.moeyy.xyz/",
         "https://gh-proxy.com/",
-        "https://ghproxy.cc/"
+        "https://ghproxy.cc/",
     };
 }
 
 bool Installer::download_with_fallback(const std::string& url,
                                        const std::string& dest_path,
                                        std::function<void(int64_t, int64_t)> on_progress,
-                                       std::atomic<bool>* cancel_flag) {
+                                       std::atomic<bool>* cancel_flag,
+                                       std::function<void(const std::string& mirror)> on_mirror) {
     auto mirrors = get_proxy_mirrors();
 
     for (const auto& mirror : mirrors) {
         if (cancel_flag && cancel_flag->load()) return false;
+
+        if (on_mirror) on_mirror(mirror);
 
         std::string full_url;
         if (mirror.empty()) {
@@ -463,7 +468,11 @@ bool Installer::download_with_fallback(const std::string& url,
             full_url = mirror + url;
         }
 
-        if (download_single(full_url, dest_path, on_progress, cancel_flag)) {
+        // Direct download: short timeout (3s) to fail fast if blocked
+        // Mirror download: normal timeout (10s)
+        int timeout = mirror.empty() ? 3 : 10;
+
+        if (download_single(full_url, dest_path, on_progress, cancel_flag, timeout)) {
             return true;
         }
     }

@@ -263,9 +263,19 @@ struct InstallWizard::Impl {
                         std::lock_guard<std::mutex> lock(mtx);
                         progress = total > 0 ? static_cast<float>(received) / static_cast<float>(total) : 0.0f;
                     }
-                    post_refresh();  // Call outside lock to avoid deadlock
+                    post_refresh();
                 },
-                &cancel_flag);
+                &cancel_flag,
+                [this](const std::string& mirror) {
+                    {
+                        std::lock_guard<std::mutex> lock(mtx);
+                        progress = 0.0f;
+                        proxy_info = mirror.empty()
+                            ? std::string(T().install_trying_direct)
+                            : std::string(T().install_trying_proxy) + " " + mirror;
+                    }
+                    post_refresh();
+                });
 
             if (cancel_flag.load()) return;
 

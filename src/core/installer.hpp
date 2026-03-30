@@ -81,16 +81,19 @@ public:
     static bool download_single(const std::string& url,
                                 const std::string& dest_path,
                                 std::function<void(int64_t received, int64_t total)> on_progress = nullptr,
-                                std::atomic<bool>* cancel_flag = nullptr);
+                                std::atomic<bool>* cancel_flag = nullptr,
+                                int connection_timeout_sec = 10);
 
     /// Get list of GitHub proxy mirrors (first entry is empty = direct)
     static std::vector<std::string> get_proxy_mirrors();
 
     /// Try downloading through mirrors, first success wins
+    /// on_mirror: called with mirror name before each attempt (empty = direct)
     static bool download_with_fallback(const std::string& url,
                                        const std::string& dest_path,
                                        std::function<void(int64_t received, int64_t total)> on_progress = nullptr,
-                                       std::atomic<bool>* cancel_flag = nullptr);
+                                       std::atomic<bool>* cancel_flag = nullptr,
+                                       std::function<void(const std::string& mirror)> on_mirror = nullptr);
 
     /// Download checksums.txt and extract hash for a specific filename
     static std::string fetch_checksum_for_file(const std::string& checksums_url,
