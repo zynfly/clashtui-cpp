@@ -605,6 +605,55 @@ bool Installer::install_binary(const std::string& gz_path,
     }
 }
 
+bool Installer::ensure_geodata(const std::string& mihomo_dir,
+                               std::function<void(const std::string& status)> on_status,
+                               std::atomic<bool>* cancel_flag) {
+    // Geodata files required by mihomo for GEOIP/GEOSITE rules
+    struct GeoFile {
+        const char* filename;
+        const char* github_url;
+    };
+
+    static const GeoFile files[] = {
+        {"geoip.metadb",
+         "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.metadb"},
+        {"geosite.dat",
+         "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"},
+    };
+
+    // Minimum valid file sizes (to detect truncated/corrupt downloads)
+    static const int64_t MIN_GEOIP_SIZE = 1024 * 1024;   // 1MB
+    static const int64_t MIN_GEOSITE_SIZE = 100 * 1024;   // 100KB
+
+    bool all_ok = true;
+    for (const auto& gf : files) {
+        if (cancel_flag && cancel_flag->load()) return false;
+
+        auto path = fs::path(mihomo_dir) / gf.filename;
+        int64_t min_size = (std::string(gf.filename) == "geoip.metadb")
+                           ? MIN_GEOIP_SIZE : MIN_GEOSITE_SIZE;
+
+        // Check if file exists and has reasonable size
+        if (fs::exists(path)) {
+            std::error_code ec;
+            auto size = fs::file_size(path, ec);
+            if (!ec && static_cast<int64_t>(size) >= min_size) {
+                continue;  // File looks valid
+            }
+            // File too small or error — re-download
+            try { fs::remove(path); } catch (...) {}
+        }
+
+        if (on_status) on_status(std::string("Downloading ") + gf.filename + "...");
+
+        if (!download_with_fallback(gf.github_url, path.string(), nullptr, cancel_flag)) {
+            all_ok = false;
+        }
+    }
+
+    return all_ok;
+}
+
 bool Installer::generate_default_config(const std::string& config_path) {
     try {
         auto parent = fs::path(config_path).parent_path();

@@ -62,6 +62,9 @@ inline constexpr Strings EN_STRINGS_DEF = {
     "Checksum not available",
     "Platform",
     "No compatible binary found",
+    "Downloading geodata...",
+    "Geodata ready",
+    "Geodata download failed (mihomo may download on first start)",
 
     // Uninstall
     "Uninstall Mihomo",

@@ -62,6 +62,9 @@ inline constexpr Strings ZH_STRINGS_DEF = {
     "无法获取校验信息",
     "平台",
     "未找到兼容的安装包",
+    "正在下载 GeoData...",
+    "GeoData 就绪",
+    "GeoData 下载失败（mihomo 首次启动时会尝试下载）",
 
     // Uninstall
     "卸载 Mihomo",

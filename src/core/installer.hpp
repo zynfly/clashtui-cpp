@@ -107,6 +107,12 @@ public:
                                const std::string& install_path,
                                bool needs_sudo);
 
+    /// Ensure geodata files (geoip.metadb, geosite.dat) exist in mihomo dir
+    /// Downloads from CDN mirrors if missing. Returns true if all files are present.
+    static bool ensure_geodata(const std::string& mihomo_dir,
+                               std::function<void(const std::string& status)> on_status = nullptr,
+                               std::atomic<bool>* cancel_flag = nullptr);
+
     /// Generate minimal mihomo config
     static bool generate_default_config(const std::string& config_path);
 

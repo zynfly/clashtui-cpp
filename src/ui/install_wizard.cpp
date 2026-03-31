@@ -351,6 +351,22 @@ struct InstallWizard::Impl {
                 }
             }
 
+            // ── 5b. Download geodata files ─────────────────────
+            {
+                auto mihomo_dir = Config::mihomo_dir();
+                if (!mihomo_dir.empty()) {
+                    set_status(T().install_geodata);
+                    post_refresh();
+                    bool geo_ok = Installer::ensure_geodata(mihomo_dir,
+                        [this](const std::string& status) {
+                            set_status(status);
+                            post_refresh();
+                        }, &cancel_flag);
+                    set_status(geo_ok ? T().install_geodata_ok : T().install_geodata_fail);
+                    post_refresh();
+                }
+            }
+
             // ── 6. Service setup ────────────────────────────────
             if (Installer::has_systemd()) {
                 set_mode(WizardMode::ServiceSetup);

@@ -64,6 +64,9 @@ struct Strings {
     const char* install_checksum_skip;
     const char* install_platform;
     const char* install_no_asset;
+    const char* install_geodata;
+    const char* install_geodata_ok;
+    const char* install_geodata_fail;
 
     // Uninstall
     const char* uninstall_title;

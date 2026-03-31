@@ -1,4 +1,5 @@
 #include "daemon/daemon.hpp"
+#include "core/installer.hpp"
 
 #ifndef APP_VERSION
 #define APP_VERSION "0.0.0"
@@ -202,6 +203,7 @@ std::string Daemon::handle_command(const std::string& json_line) {
             if (mihomo_dir.empty()) {
                 return json({{"ok", false}, {"error", "Cannot determine mihomo directory"}}).dump();
             }
+            Installer::ensure_geodata(mihomo_dir);
             if (process_mgr_.start(binary, {"-d", mihomo_dir})) {
                 wait_for_mihomo();
                 return json({{"ok", true}}).dump();
@@ -290,6 +292,8 @@ int Daemon::run() {
 
     process_mgr_.set_auto_restart(true);
     if (!binary.empty() && fs::exists(binary) && !mihomo_dir.empty()) {
+        // Ensure geodata files exist before starting mihomo
+        Installer::ensure_geodata(mihomo_dir);
         process_mgr_.start(binary, {"-d", mihomo_dir});
     }
 
